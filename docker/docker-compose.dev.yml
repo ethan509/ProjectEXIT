@@ -1,0 +1,14 @@
+# Development environment overrides
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      target: builder
+    volumes:
+      - ..:/build
+      - ../logs:/app/logs
+      - ../config:/app/config
+    environment:
+      - LOG_LEVEL=debug
+    command: go run ./cmd/server

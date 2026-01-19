@@ -1,0 +1,26 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "ProjectEXIT - Debug",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/cmd/server",
+      "args": [],
+      "env": {},
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "name": "ProjectEXIT - Run (Dev)",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/cmd/server",
+      "env": {
+        "ProjectEXIT_CONFIG": "${workspaceFolder}/config/config.json"
+      },
+      "cwd": "${workspaceFolder}"
+    }
+  ]
+}
