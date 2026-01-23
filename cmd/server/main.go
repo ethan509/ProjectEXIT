@@ -19,7 +19,7 @@ import (
 )
 
 func main() {
-	cfgPath := os.Getenv("LottoSmash_CONFIG")
+	cfgPath := os.Getenv("LOTTOMASH_CONFIG")
 	if cfgPath == "" {
 		cfgPath = "config/config.json"
 	}

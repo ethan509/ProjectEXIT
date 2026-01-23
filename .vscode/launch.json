@@ -18,7 +18,7 @@
       "mode": "auto",
       "program": "${workspaceFolder}/cmd/server",
       "env": {
-        "LottoSmash_CONFIG": "${workspaceFolder}/config/config.json"
+        "LOTTOMASH_CONFIG": "${workspaceFolder}/config/config.json"
       },
       "cwd": "${workspaceFolder}"
     }
