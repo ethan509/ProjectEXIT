@@ -8,13 +8,13 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/example/ProjectEXIT/internal/auth"
-	"github.com/example/ProjectEXIT/internal/config"
-	"github.com/example/ProjectEXIT/internal/logger"
-	"github.com/example/ProjectEXIT/internal/metrics"
-	"github.com/example/ProjectEXIT/internal/middleware"
-	"github.com/example/ProjectEXIT/internal/response"
-	"github.com/example/ProjectEXIT/internal/worker"
+	"github.com/example/LottoSmash/internal/auth"
+	"github.com/example/LottoSmash/internal/config"
+	"github.com/example/LottoSmash/internal/logger"
+	"github.com/example/LottoSmash/internal/metrics"
+	"github.com/example/LottoSmash/internal/middleware"
+	"github.com/example/LottoSmash/internal/response"
+	"github.com/example/LottoSmash/internal/worker"
 )
 
 type Dependencies struct {

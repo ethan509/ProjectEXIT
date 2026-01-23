@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/example/ProjectEXIT/internal/config"
-	"github.com/example/ProjectEXIT/internal/logger"
+	"github.com/example/LottoSmash/internal/config"
+	"github.com/example/LottoSmash/internal/logger"
 )
 
 type Scheduler struct {

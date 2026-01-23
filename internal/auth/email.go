@@ -26,14 +26,14 @@ func (s *SMTPEmailSender) SendVerificationEmail(email, code string) error {
 	body := fmt.Sprintf(`
 안녕하세요,
 
-ProjectEXIT 회원가입을 위한 인증 코드입니다.
+LottoSmash 회원가입을 위한 인증 코드입니다.
 
 인증 코드: %s
 
 이 코드는 10분간 유효합니다.
 
 감사합니다.
-ProjectEXIT 팀
+LottoSmash 팀
 `, code)
 
 	return s.sendEmail(email, subject, body)
@@ -53,7 +53,7 @@ func (s *SMTPEmailSender) SendPasswordResetEmail(email, code string) error {
 본인이 요청하지 않았다면 이 이메일을 무시해주세요.
 
 감사합니다.
-ProjectEXIT 팀
+LottoSmash 팀
 `, code)
 
 	return s.sendEmail(email, subject, body)

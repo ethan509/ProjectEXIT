@@ -6,9 +6,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/example/ProjectEXIT/internal/response"
-	"github.com/example/ProjectEXIT/internal/txid"
-	"github.com/example/ProjectEXIT/internal/worker"
+	"github.com/example/LottoSmash/internal/response"
+	"github.com/example/LottoSmash/internal/txid"
+	"github.com/example/LottoSmash/internal/worker"
 )
 
 type pingResponse struct {

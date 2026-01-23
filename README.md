@@ -1,6 +1,6 @@
-# ProjectEXIT - Go Server Template
+# LottoSmash - Go Server Template
 
-This is a server template project generated for ProjectEXIT.
+This is a server template project generated for LottoSmash.
 
 > **📖 새로 시작하시나요?** [SETUP.md](./SETUP.md)에서 개발 환경 설정 가이드를 확인하세요.
 > **🗄️ 데이터베이스 연결?** [DB_INTEGRATION.md](./docs/DB_INTEGRATION.md)에서 PostgreSQL, MySQL, MongoDB 통합 가이드를 확인하세요.
@@ -69,7 +69,7 @@ All Docker-related files are located in the `docker/` directory:
 
 ### Services
 
-- **app**: ProjectEXIT server (port 8080)
+- **app**: LottoSmash server (port 8080)
 - **db**: PostgreSQL 15 (port 5432)
 
 ### Available Make Commands

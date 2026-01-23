@@ -4,8 +4,8 @@ import (
     "context"
     "time"
 
-    "github.com/example/ProjectEXIT/internal/logger"
-    "github.com/example/ProjectEXIT/internal/txid"
+    "github.com/example/LottoSmash/internal/logger"
+    "github.com/example/LottoSmash/internal/txid"
 )
 
 type JobType int

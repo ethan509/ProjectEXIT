@@ -4,7 +4,7 @@ import (
     "encoding/json"
     "net/http"
 
-    "github.com/example/ProjectEXIT/internal/txid"
+    "github.com/example/LottoSmash/internal/txid"
 )
 
 type AppError struct {

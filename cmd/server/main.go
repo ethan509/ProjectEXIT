@@ -10,16 +10,16 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/example/ProjectEXIT/internal/config"
-	"github.com/example/ProjectEXIT/internal/database"
-	"github.com/example/ProjectEXIT/internal/logger"
-	"github.com/example/ProjectEXIT/internal/scheduler"
-	"github.com/example/ProjectEXIT/internal/server"
-	"github.com/example/ProjectEXIT/internal/worker"
+	"github.com/example/LottoSmash/internal/config"
+	"github.com/example/LottoSmash/internal/database"
+	"github.com/example/LottoSmash/internal/logger"
+	"github.com/example/LottoSmash/internal/scheduler"
+	"github.com/example/LottoSmash/internal/server"
+	"github.com/example/LottoSmash/internal/worker"
 )
 
 func main() {
-	cfgPath := os.Getenv("ProjectEXIT_CONFIG")
+	cfgPath := os.Getenv("LOTTOMASH_CONFIG")
 	if cfgPath == "" {
 		cfgPath = "config/config.json"
 	}
@@ -39,7 +39,7 @@ func main() {
 	}
 	defer lg.Close()
 
-	lg.Infof("ProjectEXIT starting with config %s", cfgPath)
+	lg.Infof("LottoSmash starting with config %s", cfgPath)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -145,5 +145,5 @@ func main() {
 		lg.Errorf("server shutdown error: %v", err)
 		_ = srv.Close()
 	}
-	lg.Infof("ProjectEXIT stopped")
+	lg.Infof("LottoSmash stopped")
 }

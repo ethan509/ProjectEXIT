@@ -1,7 +1,7 @@
-# ProjectEXIT 프로젝트 구조
+# LottoSmash 프로젝트 구조
 
 ```
-ProjectEXIT/
+LottoSmash/
 ├── cmd/
 │   └── server/
 │       └── main.go              # 애플리케이션 진입점

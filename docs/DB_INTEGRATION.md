@@ -1,6 +1,6 @@
 # 데이터베이스 통합 가이드
 
-ProjectEXIT 템플릿에 데이터베이스를 통합하는 방법을 안내합니다.
+LottoSmash 템플릿에 데이터베이스를 통합하는 방법을 안내합니다.
 
 > **참고:** 이 템플릿은 DB 연결 코드를 포함하지 않습니다. 필요에 따라 PostgreSQL, MySQL, MongoDB 등을 자유롭게 선택할 수 있습니다.
 
@@ -78,7 +78,7 @@ func NewPostgresPool(ctx context.Context, cfg Config) (*pgxpool.Pool, error) {
 
 ```go
 import (
-	"github.com/example/ProjectEXIT/internal/database"
+	"github.com/example/LottoSmash/internal/database"
 	"os"
 )
 
@@ -205,12 +205,12 @@ func NewMySQLPool(cfg Config) (*sqlx.DB, error) {
 services:
   db:
     image: mysql:8.0
-    container_name: xxxdongxxx-db
+    container_name: lottomash-db
     ports:
       - "3306:3306"
     environment:
       MYSQL_ROOT_PASSWORD: rootpassword
-      MYSQL_DATABASE: xxxdongxxx_db
+      MYSQL_DATABASE: lottomash_db
       MYSQL_USER: devuser
       MYSQL_PASSWORD: devpassword
     volumes:
@@ -284,13 +284,13 @@ func NewMongoClient(ctx context.Context, cfg Config) (*mongo.Client, error) {
 services:
   db:
     image: mongo:7
-    container_name: xxxdongxxx-db
+    container_name: lottomash-db
     ports:
       - "27017:27017"
     environment:
       MONGO_INITDB_ROOT_USERNAME: devuser
       MONGO_INITDB_ROOT_PASSWORD: devpassword
-      MONGO_INITDB_DATABASE: xxxdongxxx_db
+      MONGO_INITDB_DATABASE: lottomash_db
     volumes:
       - db_data:/data/db
     healthcheck:
@@ -345,10 +345,10 @@ DROP TABLE IF EXISTS users;
 
 ```bash
 # 적용
-migrate -path migrations -database "postgres://devuser:devpassword@localhost:5432/xxxdongxxx_db?sslmode=disable" up
+migrate -path migrations -database "postgres://devuser:devpassword@localhost:5432/lottomash_db?sslmode=disable" up
 
 # 롤백
-migrate -path migrations -database "postgres://devuser:devpassword@localhost:5432/xxxdongxxx_db?sslmode=disable" down
+migrate -path migrations -database "postgres://devuser:devpassword@localhost:5432/lottomash_db?sslmode=disable" down
 ```
 
 ---
@@ -470,7 +470,7 @@ func (r *UserRepository) List(ctx context.Context, limit, offset int) ([]User, e
 `internal/server/handlers.go`:
 
 ```go
-import "github.com/example/ProjectEXIT/internal/repository"
+import "github.com/example/LottoSmash/internal/repository"
 
 type CreateUserRequest struct {
 	Username string `json:"username"`
@@ -592,7 +592,7 @@ DB_HOST=localhost
 DB_PORT=5432
 DB_USER=devuser
 DB_PASSWORD=devpassword
-DB_NAME=xxxdongxxx_db
+DB_NAME=lottomash_db
 ```
 
 Docker Compose는 이미 설정되어 있습니다 (`docker/docker-compose.yml`).
@@ -605,10 +605,10 @@ Docker Compose는 이미 설정되어 있습니다 (`docker/docker-compose.yml`)
 
 ```bash
 # PostgreSQL 컨테이너 로그 확인
-docker logs xxxdongxxx-db
+docker logs lottomash-db
 
 # DB 직접 접속 테스트
-docker exec -it xxxdongxxx-db psql -U devuser -d xxxdongxxx_db
+docker exec -it lottomash-db psql -U devuser -d lottomash_db
 ```
 
 ### 성능 최적화

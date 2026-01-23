@@ -7,9 +7,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/example/ProjectEXIT/internal/config"
-	"github.com/example/ProjectEXIT/internal/logger"
-	"github.com/example/ProjectEXIT/internal/worker"
+	"github.com/example/LottoSmash/internal/config"
+	"github.com/example/LottoSmash/internal/logger"
+	"github.com/example/LottoSmash/internal/worker"
 )
 
 func newTestDeps(t *testing.T) Dependencies {

@@ -6,11 +6,11 @@ import (
     "net/http"
     "time"
 
-    "github.com/example/ProjectEXIT/internal/config"
-    "github.com/example/ProjectEXIT/internal/logger"
-    "github.com/example/ProjectEXIT/internal/metrics"
-    "github.com/example/ProjectEXIT/internal/response"
-    "github.com/example/ProjectEXIT/internal/txid"
+    "github.com/example/LottoSmash/internal/config"
+    "github.com/example/LottoSmash/internal/logger"
+    "github.com/example/LottoSmash/internal/metrics"
+    "github.com/example/LottoSmash/internal/response"
+    "github.com/example/LottoSmash/internal/txid"
 )
 
 type Middleware func(http.Handler) http.Handler

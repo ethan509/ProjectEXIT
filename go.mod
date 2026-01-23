@@ -1,4 +1,4 @@
-module github.com/example/ProjectEXIT
+module github.com/example/LottoSmash
 
 go 1.24.0
 

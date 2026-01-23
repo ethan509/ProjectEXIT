@@ -1,4 +1,4 @@
-# ProjectEXIT 개발 환경 설정 가이드
+# LottoSmash 개발 환경 설정 가이드
 
 다른 컴퓨터에서 이 프로젝트를 클론하고 개발 환경을 구축하는 방법입니다.
 
@@ -50,8 +50,8 @@ git --version
 ### 1. 프로젝트 클론
 
 ```bash
-git clone https://github.com/ethan509/ProjectEXIT.git
-cd ProjectEXIT
+git clone https://github.com/ethan509/LottoSmash.git
+cd LottoSmash
 ```
 
 ### 2. 의존성 다운로드
@@ -153,7 +153,7 @@ F5를 눌러 디버깅을 시작할 수 있습니다.
 ## 디렉토리 구조 확인
 
 ```bash
-ProjectEXIT/
+LottoSmash/
 ├── cmd/server/           # 메인 애플리케이션
 ├── internal/             # 내부 패키지
 ├── config/               # 설정 파일
@@ -317,4 +317,4 @@ git push origin feature/new-feature
 ## 지원
 
 문제가 발생하면 GitHub Issues에 등록해주세요:
-https://github.com/ethan509/ProjectEXIT/issues
+https://github.com/ethan509/LottoSmash/issues
