@@ -5,7 +5,7 @@ info:
   version: 1.0.0
 
 servers:
-  - url: http://localhost:8080
+  - url: http://localhost:8081
     description: Local development server
 
 tags:
@@ -15,6 +15,8 @@ tags:
     description: 예제 API
   - name: Auth
     description: 인증 관련 API
+  - name: Lotto
+    description: 로또 당첨번호 및 통계 API
 
 paths:
   # ============================================
@@ -394,6 +396,129 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
 
+  # ============================================
+  # Lotto APIs
+  # ============================================
+  /api/lotto/draws:
+    get:
+      tags: [Lotto]
+      summary: 당첨번호 목록 조회
+      description: 로또 당첨번호 목록을 페이지네이션으로 조회
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+          description: 조회할 개수 (최대 100)
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+          description: 건너뛸 개수
+      responses:
+        '200':
+          description: 당첨번호 목록
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DrawListResponse'
+
+  /api/lotto/draws/{drawNo}:
+    get:
+      tags: [Lotto]
+      summary: 특정 회차 당첨번호 조회
+      description: 특정 회차의 당첨번호 상세 정보 조회
+      parameters:
+        - name: drawNo
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: 회차 번호
+          example: 1000
+      responses:
+        '200':
+          description: 당첨번호 정보
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LottoDraw'
+        '404':
+          description: 회차를 찾을 수 없음
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/lotto/stats:
+    get:
+      tags: [Lotto]
+      summary: 전체 통계 조회
+      description: 번호별 당첨 횟수 및 재등장 확률 통계
+      responses:
+        '200':
+          description: 통계 정보
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatsResponse'
+
+  /api/lotto/stats/numbers:
+    get:
+      tags: [Lotto]
+      summary: 번호별 당첨 횟수
+      description: 1~45 각 번호별 당첨 횟수 통계
+      responses:
+        '200':
+          description: 번호별 통계
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  number_stats:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/NumberStat'
+
+  /api/lotto/stats/reappear:
+    get:
+      tags: [Lotto]
+      summary: 번호 재등장 확률
+      description: 각 번호가 다음 회차에 재등장할 확률 통계
+      responses:
+        '200':
+          description: 재등장 확률 통계
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  reappear_stats:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ReappearStat'
+
+  /api/admin/lotto/sync:
+    post:
+      tags: [Lotto]
+      summary: 수동 동기화 (관리자)
+      description: 최신 당첨번호를 수동으로 동기화
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: 동기화 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
 components:
   securitySchemes:
     BearerAuth:
@@ -458,6 +583,128 @@ components:
         created_at:
           type: string
           format: date-time
+
+    LottoDraw:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        draw_no:
+          type: integer
+          description: 회차 번호
+          example: 1000
+        draw_date:
+          type: string
+          format: date
+          description: 추첨일
+          example: "2022-01-01"
+        num1:
+          type: integer
+          description: 당첨번호 1
+          example: 7
+        num2:
+          type: integer
+          example: 13
+        num3:
+          type: integer
+          example: 21
+        num4:
+          type: integer
+          example: 28
+        num5:
+          type: integer
+          example: 35
+        num6:
+          type: integer
+          example: 42
+        bonus_num:
+          type: integer
+          description: 보너스 번호
+          example: 15
+        first_prize:
+          type: integer
+          format: int64
+          description: 1등 당첨금
+          example: 2000000000
+        first_winners:
+          type: integer
+          description: 1등 당첨자 수
+          example: 5
+
+    DrawListResponse:
+      type: object
+      properties:
+        draws:
+          type: array
+          items:
+            $ref: '#/components/schemas/LottoDraw'
+        total_count:
+          type: integer
+          description: 전체 회차 수
+        latest_draw:
+          type: integer
+          description: 최신 회차 번호
+
+    NumberStat:
+      type: object
+      properties:
+        number:
+          type: integer
+          description: 번호 (1~45)
+          example: 7
+        total_count:
+          type: integer
+          description: 총 당첨 횟수
+          example: 150
+        bonus_count:
+          type: integer
+          description: 보너스로 나온 횟수
+          example: 25
+        last_draw_no:
+          type: integer
+          description: 마지막으로 나온 회차
+          example: 1150
+
+    ReappearStat:
+      type: object
+      properties:
+        number:
+          type: integer
+          description: 번호 (1~45)
+          example: 7
+        total_appear:
+          type: integer
+          description: 총 출현 횟수
+          example: 150
+        reappear_count:
+          type: integer
+          description: 다음 회차에 재등장한 횟수
+          example: 25
+        probability:
+          type: number
+          format: float
+          description: 재등장 확률
+          example: 0.1667
+
+    StatsResponse:
+      type: object
+      properties:
+        number_stats:
+          type: array
+          items:
+            $ref: '#/components/schemas/NumberStat'
+        reappear_stats:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReappearStat'
+        latest_draw_no:
+          type: integer
+          description: 기준 회차
+        calculated_at:
+          type: string
+          format: date-time
+          description: 계산 시점
 
   responses:
     BadRequest:

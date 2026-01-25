@@ -11,6 +11,7 @@ import (
 	"github.com/example/LottoSmash/internal/auth"
 	"github.com/example/LottoSmash/internal/config"
 	"github.com/example/LottoSmash/internal/logger"
+	"github.com/example/LottoSmash/internal/lotto"
 	"github.com/example/LottoSmash/internal/metrics"
 	"github.com/example/LottoSmash/internal/middleware"
 	"github.com/example/LottoSmash/internal/response"
@@ -22,6 +23,7 @@ type Dependencies struct {
 	Logger    *logger.Logger
 	Pools     *worker.Pools
 	DB        *sql.DB
+	LottoSvc  *lotto.Service
 }
 
 func NewRouter(deps Dependencies) http.Handler {
@@ -55,23 +57,44 @@ func NewRouter(deps Dependencies) http.Handler {
 		authHandler := setupAuth(deps)
 		authMiddleware := setupAuthMiddleware(deps)
 
-		// public auth routes
+		// auth routes
 		r.Route("/api/auth", func(r chi.Router) {
+			// public routes
 			r.Post("/guest", authHandler.GuestLogin)
 			r.Post("/register", authHandler.EmailRegister)
 			r.Post("/login", authHandler.EmailLogin)
 			r.Post("/refresh", authHandler.RefreshToken)
 			r.Post("/logout", authHandler.Logout)
 			r.Post("/send-code", authHandler.SendVerificationCode)
+
+			// protected routes
+			r.Group(func(r chi.Router) {
+				r.Use(authMiddleware.RequireAuth)
+				r.Get("/me", authHandler.GetMe)
+				r.Post("/link-email", authHandler.LinkEmail)
+				r.Post("/change-password", authHandler.ChangePassword)
+			})
 		})
 
-		// protected auth routes
-		r.Route("/api/auth", func(r chi.Router) {
-			r.Use(authMiddleware.RequireAuth)
-			r.Get("/me", authHandler.GetMe)
-			r.Post("/link-email", authHandler.LinkEmail)
-			r.Post("/change-password", authHandler.ChangePassword)
-		})
+		// lotto routes
+		if deps.LottoSvc != nil {
+			lottoHandler := lotto.NewHandler(deps.LottoSvc)
+
+			// public lotto routes
+			r.Route("/api/lotto", func(r chi.Router) {
+				r.Get("/draws", lottoHandler.GetDraws)
+				r.Get("/draws/{drawNo}", lottoHandler.GetDraw)
+				r.Get("/stats", lottoHandler.GetStats)
+				r.Get("/stats/numbers", lottoHandler.GetNumberStats)
+				r.Get("/stats/reappear", lottoHandler.GetReappearStats)
+			})
+
+			// admin lotto routes (protected)
+			r.Route("/api/admin/lotto", func(r chi.Router) {
+				r.Use(authMiddleware.RequireAuth)
+				r.Post("/sync", lottoHandler.TriggerSync)
+			})
+		}
 	}
 
 	return r

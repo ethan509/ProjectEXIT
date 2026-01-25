@@ -14,6 +14,7 @@ type Level int
 const (
 	Debug Level = iota
 	Info
+	Warn
 	Error
 	Critical
 )
@@ -24,6 +25,8 @@ func ParseLevel(s string) Level {
 		return Debug
 	case "info":
 		return Info
+	case "warn", "warning":
+		return Warn
 	case "error":
 		return Error
 	case "critical":
@@ -134,6 +137,8 @@ func (l *Logger) filename(level Level, idx int) string {
 		suffix = "debug"
 	case Info:
 		suffix = "info"
+	case Warn:
+		suffix = "warn"
 	case Error:
 		suffix = "error"
 	case Critical:
@@ -170,5 +175,6 @@ func (l *Logger) Close() {
 
 func (l *Logger) Debugf(format string, args ...any)    { l.logf(Debug, format, args...) }
 func (l *Logger) Infof(format string, args ...any)     { l.logf(Info, format, args...) }
+func (l *Logger) Warnf(format string, args ...any)     { l.logf(Warn, format, args...) }
 func (l *Logger) Errorf(format string, args ...any)    { l.logf(Error, format, args...) }
 func (l *Logger) Criticalf(format string, args ...any) { l.logf(Critical, format, args...) }

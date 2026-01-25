@@ -7,12 +7,14 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
 	"github.com/example/LottoSmash/internal/config"
 	"github.com/example/LottoSmash/internal/database"
 	"github.com/example/LottoSmash/internal/logger"
+	"github.com/example/LottoSmash/internal/lotto"
 	"github.com/example/LottoSmash/internal/scheduler"
 	"github.com/example/LottoSmash/internal/server"
 	"github.com/example/LottoSmash/internal/worker"
@@ -74,18 +76,25 @@ func main() {
 	worker.StartDBWorkers(ctx, cfgMgr.Config().Concurrency.DBWorkerCount, pools, lg)
 	worker.StartExternalWorkers(ctx, cfgMgr.Config().Concurrency.ExternalWorkerCount, pools, lg)
 
-	// scheduler
-	if cfgMgr.Config().Scheduler.Enabled {
-		sched, err := scheduler.New(cfgMgr.Config(), lg)
-		if err != nil {
-			lg.Errorf("failed to init scheduler: %v", err)
-		} else {
-			sched.Start(ctx)
-		}
-	}
-
 	// database connection
 	dbCfg := cfgMgr.Config().Database
+
+	// Docker 환경변수 오버라이드 (설정 파일보다 우선)
+	if host := os.Getenv("DB_HOST"); host != "" {
+		dbCfg.Host = host
+	}
+	if port := os.Getenv("DB_PORT"); port != "" {
+		if p, err := strconv.Atoi(port); err == nil {
+			dbCfg.Port = p
+		}
+	}
+	if user := os.Getenv("DB_USER"); user != "" {
+		dbCfg.User = user
+	}
+	if pass := os.Getenv("DB_PASSWORD"); pass != "" {
+		dbCfg.Password = pass
+	}
+
 	db, err := database.New(database.Config{
 		Host:     dbCfg.Host,
 		Port:     dbCfg.Port,
@@ -101,11 +110,37 @@ func main() {
 		lg.Infof("connected to database")
 	}
 
+	// lotto service initialization
+	var lottoSvc *lotto.Service
+	if db != nil {
+		lottoRepo := lotto.NewRepository(db)
+		lottoClient := lotto.NewClient()
+		lottoAnalyzer := lotto.NewAnalyzer(lottoRepo, lg)
+		lottoSvc = lotto.NewService(lottoRepo, lottoClient, lottoAnalyzer, lg)
+
+		// 서버 시작 시 당첨번호 초기화
+		docsPath := cfgMgr.ResolvePath("docs")
+		if err := lottoSvc.InitializeDraws(ctx, docsPath); err != nil {
+			lg.Errorf("failed to initialize lotto draws: %v", err)
+		}
+	}
+
+	// scheduler (DB 연결 후 시작)
+	if cfgMgr.Config().Scheduler.Enabled {
+		sched, err := scheduler.New(cfgMgr.Config(), lg, lottoSvc)
+		if err != nil {
+			lg.Errorf("failed to init scheduler: %v", err)
+		} else {
+			sched.Start(ctx)
+		}
+	}
+
 	deps := server.Dependencies{
 		ConfigMgr: cfgMgr,
 		Logger:    lg,
 		Pools:     pools,
 		DB:        db,
+		LottoSvc:  lottoSvc,
 	}
 	router := server.NewRouter(deps)
 

@@ -1,5 +1,5 @@
 # Build stage
-FROM golang:1.24-alpine AS builder
+FROM golang:1.23-alpine AS builder
 
 # Install build dependencies
 RUN apk add --no-cache git ca-certificates tzdata
@@ -16,11 +16,14 @@ RUN go mod download
 # Copy source code
 COPY . .
 
+# Ensure dependencies are synced
+RUN go mod tidy
+
 # Build the application
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+RUN CGO_ENABLED=0 GOOS=linux go build \
     -ldflags="-w -s" \
     -o /build/server \
-    ./cmd/server
+    ./cmd/server/main.go
 
 # Runtime stage
 FROM alpine:latest
@@ -29,8 +32,8 @@ FROM alpine:latest
 RUN apk add --no-cache ca-certificates tzdata
 
 # Create non-root user
-RUN addgroup -g 1000 appgroup && \
-    adduser -D -u 1000 -G appgroup appuser
+# RUN addgroup -g 1000 appgroup && \
+#     adduser -D -u 1000 -G appgroup appuser
 
 # Set working directory
 WORKDIR /app
@@ -39,13 +42,13 @@ WORKDIR /app
 COPY --from=builder /build/server /app/server
 
 # Copy config directory
-COPY --chown=appuser:appgroup config /app/config
+COPY config /app/config
 
 # Create logs directory
-RUN mkdir -p /app/logs && chown -R appuser:appgroup /app/logs
+# RUN mkdir -p /app/logs && chown -R appuser:appgroup /app/logs
 
 # Switch to non-root user
-USER appuser
+# USER appuser
 
 # Expose port
 EXPOSE 8080

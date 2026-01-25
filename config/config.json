@@ -1,55 +1,52 @@
 {
+  "logging": {
+    "dir": "logs",
+    "level": "info"
+  },
+  "configReload": {
+    "enabled": true,
+    "intervalMinutes": 1
+  },
+  "concurrency": {
+    "maxConcurrentRequests": 1000,
+    "inputChannelSize": 100,
+    "dbChannelSize": 100,
+    "externalChannelSize": 100,
+    "mainLogicWorkerCount": 5,
+    "dbWorkerCount": 5,
+    "externalWorkerCount": 5
+  },
+  "database": {
+    "host": "db",
+    "port": 5432,
+    "user": "lotto_user",
+    "password": "lotto_password",
+    "dbName": "lotto_db",
+    "sslMode": "disable"
+  },
+  "scheduler": {
+    "enabled": true,
+    "timezone": "Asia/Seoul"
+  },
   "server": {
-    "_comment": {
-      "server.maxRequestBodyBytes": "1024 * 1024 * 10 = 10MB"
-    },
     "address": ":8080",
     "readTimeoutSec": 10,
     "writeTimeoutSec": 10,
     "idleTimeoutSec": 60,
-    "requestTimeoutSec": 5,
-    "maxRequestBodyBytes": 10485760
-  },
-  "logging": {
-    "level": "debug",
-    "dir": "logs"
-  },
-  "concurrency": {
-    "maxConcurrentRequests": 5000,
-    "mainLogicWorkerCount": 8,
-    "dbWorkerCount": 4,
-    "externalWorkerCount": 4,
-    "inputChannelSize": 1024,
-    "dbChannelSize": 256,
-    "externalChannelSize": 256
-  },
-  "scheduler": {
-    "timezone": "Asia/Seoul",
-    "enabled": true
-  },
-  "configReload": {
-    "enabled": true,
-    "intervalMinutes": 10
-  },
-  "database": {
-    "host": "localhost",
-    "port": 5432,
-    "user": "devuser",
-    "password": "devpassword",
-    "dbName": "lottomash_db",
-    "sslMode": "disable"
+    "requestTimeoutSec": 30,
+    "maxRequestBodyBytes": 1048576
   },
   "jwt": {
-    "secretKey": "your-secret-key-change-in-production",
-    "accessTokenExpiryMin": 15,
+    "secretKey": "your-secret-key-change-this-in-production",
+    "accessTokenExpiryMin": 60,
     "refreshTokenExpiryDays": 7
   },
   "smtp": {
     "enabled": false,
     "host": "smtp.gmail.com",
     "port": 587,
-    "username": "",
-    "password": "",
-    "from": ""
+    "username": "your-email@gmail.com",
+    "password": "your-password",
+    "from": "noreply@example.com"
   }
 }
