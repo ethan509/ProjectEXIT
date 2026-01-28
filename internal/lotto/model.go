@@ -95,6 +95,21 @@ type ConsecutiveStatsResponse struct {
 	LatestDrawNo   int                    `json:"latest_draw_no"`
 }
 
+// RatioStat 비율별 통계 (홀짝, 고저)
+type RatioStat struct {
+	Ratio       string  `json:"ratio"`       // 비율 표현 (예: "3:3", "4:2")
+	Count       int     `json:"count"`       // 해당 비율이 나온 회차 수
+	Probability float64 `json:"probability"` // 확률
+}
+
+// RatioStatsResponse 홀짝/고저 비율 통계 응답
+type RatioStatsResponse struct {
+	OddEvenStats []RatioStat `json:"odd_even_stats"` // 홀:짝 비율
+	HighLowStats []RatioStat `json:"high_low_stats"` // 고:저 비율 (23~45:1~22)
+	TotalDraws   int         `json:"total_draws"`
+	LatestDrawNo int         `json:"latest_draw_no"`
+}
+
 // DhlotteryResponse 동행복권 API 응답
 type DhlotteryResponse struct {
 	ReturnValue    string `json:"returnValue"`

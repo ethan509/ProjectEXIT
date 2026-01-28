@@ -2,6 +2,7 @@ package lotto
 
 import (
 	"context"
+	"fmt"
 	"sort"
 
 	"github.com/example/LottoSmash/internal/constants"
@@ -377,6 +378,97 @@ func countConsecutive(nums []int) int {
 		return 0
 	}
 	return maxConsec
+}
+
+// CalculateRatioStats 홀짝/고저 비율 통계 계산
+func (a *Analyzer) CalculateRatioStats(ctx context.Context) (*RatioStatsResponse, error) {
+	draws, err := a.repo.GetAllDraws(ctx)
+	if err != nil {
+		a.log.Errorf("CalculateRatioStats: failed to get all draws: %v", err)
+		return nil, err
+	}
+
+	if len(draws) == 0 {
+		return nil, nil
+	}
+
+	totalDraws := len(draws)
+
+	// 홀짝 비율별 카운트 (key: "홀:짝")
+	oddEvenMap := make(map[string]int)
+	// 고저 비율별 카운트 (key: "고:저", 고=23~45, 저=1~22)
+	highLowMap := make(map[string]int)
+
+	latestDrawNo := 0
+	for _, draw := range draws {
+		nums := draw.Numbers()
+		if draw.DrawNo > latestDrawNo {
+			latestDrawNo = draw.DrawNo
+		}
+
+		// 홀짝 계산
+		oddCount := 0
+		for _, n := range nums {
+			if n%2 == 1 {
+				oddCount++
+			}
+		}
+		evenCount := 6 - oddCount
+		oddEvenKey := fmt.Sprintf("%d:%d", oddCount, evenCount)
+		oddEvenMap[oddEvenKey]++
+
+		// 고저 계산 (고=23~45, 저=1~22)
+		highCount := 0
+		for _, n := range nums {
+			if n >= 23 {
+				highCount++
+			}
+		}
+		lowCount := 6 - highCount
+		highLowKey := fmt.Sprintf("%d:%d", highCount, lowCount)
+		highLowMap[highLowKey]++
+	}
+
+	// 홀짝 통계 변환 (정렬: 6:0, 5:1, 4:2, 3:3, 2:4, 1:5, 0:6)
+	oddEvenStats := make([]RatioStat, 0)
+	for odd := 6; odd >= 0; odd-- {
+		even := 6 - odd
+		key := fmt.Sprintf("%d:%d", odd, even)
+		count := oddEvenMap[key]
+		prob := 0.0
+		if totalDraws > 0 {
+			prob = float64(count) / float64(totalDraws)
+		}
+		oddEvenStats = append(oddEvenStats, RatioStat{
+			Ratio:       key,
+			Count:       count,
+			Probability: prob,
+		})
+	}
+
+	// 고저 통계 변환 (정렬: 6:0, 5:1, 4:2, 3:3, 2:4, 1:5, 0:6)
+	highLowStats := make([]RatioStat, 0)
+	for high := 6; high >= 0; high-- {
+		low := 6 - high
+		key := fmt.Sprintf("%d:%d", high, low)
+		count := highLowMap[key]
+		prob := 0.0
+		if totalDraws > 0 {
+			prob = float64(count) / float64(totalDraws)
+		}
+		highLowStats = append(highLowStats, RatioStat{
+			Ratio:       key,
+			Count:       count,
+			Probability: prob,
+		})
+	}
+
+	return &RatioStatsResponse{
+		OddEvenStats: oddEvenStats,
+		HighLowStats: highLowStats,
+		TotalDraws:   totalDraws,
+		LatestDrawNo: latestDrawNo,
+	}, nil
 }
 
 // RunFullAnalysis 전체 분석 실행 및 저장

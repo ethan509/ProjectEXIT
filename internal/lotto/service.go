@@ -629,6 +629,11 @@ func (s *Service) GetConsecutiveStats(ctx context.Context) (*ConsecutiveStatsRes
 	return s.analyzer.CalculateConsecutiveStats(ctx)
 }
 
+// GetRatioStats 홀짝/고저 비율 통계 조회
+func (s *Service) GetRatioStats(ctx context.Context) (*RatioStatsResponse, error) {
+	return s.analyzer.CalculateRatioStats(ctx)
+}
+
 // TriggerSync 수동 동기화 (관리자용)
 func (s *Service) TriggerSync(ctx context.Context) error {
 	if err := s.FetchNewDraw(ctx); err != nil {
