@@ -2,6 +2,7 @@ package lotto
 
 import (
 	"context"
+	"sort"
 
 	"github.com/example/LottoSmash/internal/constants"
 	"github.com/example/LottoSmash/internal/logger"
@@ -193,6 +194,84 @@ func (a *Analyzer) CalculateFirstLastStats(ctx context.Context) (*FirstLastStats
 	return &FirstLastStatsResponse{
 		FirstStats:   firstStats,
 		LastStats:    lastStats,
+		TotalDraws:   totalDraws,
+		LatestDrawNo: latestDrawNo,
+	}, nil
+}
+
+// CalculatePairStats 번호 쌍 동반 출현 통계 계산
+// 두 번호가 같은 회차에 함께 나온 횟수를 계산
+func (a *Analyzer) CalculatePairStats(ctx context.Context, topN int) (*PairStatsResponse, error) {
+	draws, err := a.repo.GetAllDraws(ctx)
+	if err != nil {
+		a.log.Errorf("CalculatePairStats: failed to get all draws: %v", err)
+		return nil, err
+	}
+
+	if len(draws) == 0 {
+		return nil, nil
+	}
+
+	totalDraws := len(draws)
+
+	// 번호 쌍별 동반 출현 횟수 계산
+	// key: "작은번호-큰번호" 형태로 저장
+	pairCountMap := make(map[[2]int]int)
+
+	latestDrawNo := 0
+	for _, draw := range draws {
+		nums := draw.Numbers()
+		if draw.DrawNo > latestDrawNo {
+			latestDrawNo = draw.DrawNo
+		}
+
+		// 6개 번호 중 2개씩 조합 (6C2 = 15개)
+		for i := 0; i < len(nums); i++ {
+			for j := i + 1; j < len(nums); j++ {
+				// 항상 작은 번호가 먼저 오도록
+				n1, n2 := nums[i], nums[j]
+				if n1 > n2 {
+					n1, n2 = n2, n1
+				}
+				pairCountMap[[2]int{n1, n2}]++
+			}
+		}
+	}
+
+	// PairStat 슬라이스로 변환
+	allPairs := make([]PairStat, 0, len(pairCountMap))
+	for pair, count := range pairCountMap {
+		prob := float64(count) / float64(totalDraws)
+		allPairs = append(allPairs, PairStat{
+			Number1:     pair[0],
+			Number2:     pair[1],
+			Count:       count,
+			Probability: prob,
+		})
+	}
+
+	// 출현 횟수로 정렬
+	sort.Slice(allPairs, func(i, j int) bool {
+		return allPairs[i].Count > allPairs[j].Count
+	})
+
+	// 상위 N개, 하위 N개 추출
+	if topN > len(allPairs) {
+		topN = len(allPairs)
+	}
+
+	topPairs := allPairs[:topN]
+	bottomPairs := make([]PairStat, topN)
+	copy(bottomPairs, allPairs[len(allPairs)-topN:])
+
+	// 하위는 오름차순으로 정렬 (가장 적게 나온 것부터)
+	sort.Slice(bottomPairs, func(i, j int) bool {
+		return bottomPairs[i].Count < bottomPairs[j].Count
+	})
+
+	return &PairStatsResponse{
+		TopPairs:     topPairs,
+		BottomPairs:  bottomPairs,
 		TotalDraws:   totalDraws,
 		LatestDrawNo: latestDrawNo,
 	}, nil

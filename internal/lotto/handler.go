@@ -113,6 +113,24 @@ func (h *Handler) GetFirstLastStats(w http.ResponseWriter, r *http.Request) {
 	h.jsonResponse(w, http.StatusOK, stats)
 }
 
+// GetPairStats GET /api/lotto/stats/pairs?top=20
+func (h *Handler) GetPairStats(w http.ResponseWriter, r *http.Request) {
+	topN := 20
+	if t := r.URL.Query().Get("top"); t != "" {
+		if v, err := strconv.Atoi(t); err == nil && v > 0 && v <= 100 {
+			topN = v
+		}
+	}
+
+	stats, err := h.service.GetPairStats(r.Context(), topN)
+	if err != nil {
+		h.errorResponse(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	h.jsonResponse(w, http.StatusOK, stats)
+}
+
 // TriggerSync POST /api/admin/lotto/sync
 func (h *Handler) TriggerSync(w http.ResponseWriter, r *http.Request) {
 	if err := h.service.TriggerSync(r.Context()); err != nil {
