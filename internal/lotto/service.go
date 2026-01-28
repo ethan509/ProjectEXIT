@@ -619,6 +619,11 @@ func (s *Service) GetFirstLastStats(ctx context.Context) (*FirstLastStatsRespons
 	return s.analyzer.CalculateFirstLastStats(ctx)
 }
 
+// GetPairStats 번호 쌍 동반 출현 통계 조회
+func (s *Service) GetPairStats(ctx context.Context, topN int) (*PairStatsResponse, error) {
+	return s.analyzer.CalculatePairStats(ctx, topN)
+}
+
 // TriggerSync 수동 동기화 (관리자용)
 func (s *Service) TriggerSync(ctx context.Context) error {
 	if err := s.FetchNewDraw(ctx); err != nil {

@@ -51,10 +51,26 @@ type PositionStat struct {
 
 // FirstLastStatsResponse 첫번째/마지막 번호 확률 응답
 type FirstLastStatsResponse struct {
-	FirstStats  []PositionStat `json:"first_stats"`
-	LastStats   []PositionStat `json:"last_stats"`
-	TotalDraws  int            `json:"total_draws"`
-	LatestDrawNo int           `json:"latest_draw_no"`
+	FirstStats   []PositionStat `json:"first_stats"`
+	LastStats    []PositionStat `json:"last_stats"`
+	TotalDraws   int            `json:"total_draws"`
+	LatestDrawNo int            `json:"latest_draw_no"`
+}
+
+// PairStat 번호 쌍 동반 출현 통계
+type PairStat struct {
+	Number1     int     `json:"number1"`
+	Number2     int     `json:"number2"`
+	Count       int     `json:"count"`
+	Probability float64 `json:"probability"`
+}
+
+// PairStatsResponse 동반 출현 통계 응답
+type PairStatsResponse struct {
+	TopPairs     []PairStat `json:"top_pairs"`
+	BottomPairs  []PairStat `json:"bottom_pairs"`
+	TotalDraws   int        `json:"total_draws"`
+	LatestDrawNo int        `json:"latest_draw_no"`
 }
 
 // DhlotteryResponse 동행복권 API 응답
