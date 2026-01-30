@@ -211,8 +211,8 @@ services:
     environment:
       MYSQL_ROOT_PASSWORD: rootpassword
       MYSQL_DATABASE: lottosmash_db
-      MYSQL_USER: lotto-user
-      MYSQL_PASSWORD: lotto-pw
+      MYSQL_USER: lottosmash
+      MYSQL_PASSWORD: lottosmash_pw
     volumes:
       - db_data:/var/lib/mysql
     healthcheck:
@@ -288,8 +288,8 @@ services:
     ports:
       - "27017:27017"
     environment:
-      MONGO_INITDB_ROOT_USERNAME: lotto-user
-      MONGO_INITDB_ROOT_PASSWORD: lotto-pw
+      MONGO_INITDB_ROOT_USERNAME: lottosmash
+      MONGO_INITDB_ROOT_PASSWORD: lottosmash_pw
       MONGO_INITDB_DATABASE: lottosmash_db
     volumes:
       - db_data:/data/db
@@ -345,10 +345,10 @@ DROP TABLE IF EXISTS users;
 
 ```bash
 # 적용
-migrate -path migrations -database "postgres://lotto-user:lotto-pw@localhost:5432/lottosmash_db?sslmode=disable" up
+migrate -path migrations -database "postgres://lottosmash:lottosmash_pw@localhost:5432/lottosmash_db?sslmode=disable" up
 
 # 롤백
-migrate -path migrations -database "postgres://lotto-user:lotto-pw@localhost:5432/lottosmash_db?sslmode=disable" down
+migrate -path migrations -database "postgres://lottosmash:lottosmash_pw@localhost:5432/lottosmash_db?sslmode=disable" down
 ```
 
 ---
@@ -590,8 +590,8 @@ poolConfig.HealthCheckPeriod = time.Minute     // 헬스체크 주기
 ```bash
 DB_HOST=localhost
 DB_PORT=5432
-DB_USER=lotto-user
-DB_PASSWORD=lotto-pw
+DB_USER=lottosmash
+DB_PASSWORD=lottosmash_pw
 DB_NAME=lottosmash_db
 ```
 
@@ -608,7 +608,7 @@ Docker Compose는 이미 설정되어 있습니다 (`docker/docker-compose.yml`)
 docker logs lottosmash-db
 
 # DB 직접 접속 테스트
-docker exec -it lottosmash-db psql -U lotto-user -d lottosmash_db
+docker exec -it lottosmash-db psql -U lottosmash -d lottosmash_db
 ```
 
 ### 성능 최적화
