@@ -471,6 +471,213 @@ func (a *Analyzer) CalculateRatioStats(ctx context.Context) (*RatioStatsResponse
 	}, nil
 }
 
+// getColorForNumber 번호에 해당하는 색상 반환
+// 한국 로또 공식 색상: 1~10(Y노랑), 11~20(B파랑), 21~30(R빨강), 31~40(G회색), 41~45(E초록)
+func getColorForNumber(num int) string {
+	switch {
+	case num >= 1 && num <= 10:
+		return "Y" // Yellow 노랑
+	case num >= 11 && num <= 20:
+		return "B" // Blue 파랑
+	case num >= 21 && num <= 30:
+		return "R" // Red 빨강
+	case num >= 31 && num <= 40:
+		return "G" // Gray 회색
+	case num >= 41 && num <= 45:
+		return "E" // grEen 초록
+	default:
+		return "?"
+	}
+}
+
+// CalculateColorStats 색상 패턴 통계 계산
+func (a *Analyzer) CalculateColorStats(ctx context.Context, topN int) (*ColorStatsResponse, error) {
+	draws, err := a.repo.GetAllDraws(ctx)
+	if err != nil {
+		a.log.Errorf("CalculateColorStats: failed to get all draws: %v", err)
+		return nil, err
+	}
+
+	if len(draws) == 0 {
+		return nil, nil
+	}
+
+	totalDraws := len(draws)
+
+	// 색상 패턴별 카운트
+	patternMap := make(map[string]int)
+	// 각 색상별 총 출현 횟수
+	colorCounts := map[string]int{"Y": 0, "B": 0, "R": 0, "G": 0, "E": 0}
+
+	latestDrawNo := 0
+	for _, draw := range draws {
+		nums := draw.Numbers()
+		if draw.DrawNo > latestDrawNo {
+			latestDrawNo = draw.DrawNo
+		}
+
+		// 색상 패턴 생성
+		var pattern string
+		for _, num := range nums {
+			color := getColorForNumber(num)
+			pattern += color
+			colorCounts[color]++
+		}
+		patternMap[pattern]++
+	}
+
+	// 패턴을 슬라이스로 변환하고 정렬
+	patterns := make([]ColorPatternStat, 0, len(patternMap))
+	for pattern, count := range patternMap {
+		prob := float64(count) / float64(totalDraws)
+		patterns = append(patterns, ColorPatternStat{
+			Pattern:     pattern,
+			Count:       count,
+			Probability: prob,
+		})
+	}
+
+	sort.Slice(patterns, func(i, j int) bool {
+		return patterns[i].Count > patterns[j].Count
+	})
+
+	if topN > len(patterns) {
+		topN = len(patterns)
+	}
+
+	return &ColorStatsResponse{
+		TopPatterns:  patterns[:topN],
+		ColorCounts:  colorCounts,
+		TotalDraws:   totalDraws,
+		LatestDrawNo: latestDrawNo,
+	}, nil
+}
+
+// getRowCol 번호의 7x7 격자 좌표 반환 (1-indexed)
+func getRowCol(num int) (row, col int) {
+	row = (num-1)/7 + 1
+	col = (num-1)%7 + 1
+	return
+}
+
+// CalculateRowColStats 행/열 분포 통계 계산 (7x7 격자 기준)
+func (a *Analyzer) CalculateRowColStats(ctx context.Context, topN int) (*RowColStatsResponse, error) {
+	draws, err := a.repo.GetAllDraws(ctx)
+	if err != nil {
+		a.log.Errorf("CalculateRowColStats: failed to get all draws: %v", err)
+		return nil, err
+	}
+
+	if len(draws) == 0 {
+		return nil, nil
+	}
+
+	totalDraws := len(draws)
+
+	// 각 행/열별 총 출현 횟수
+	rowCounts := make([]int, 8) // 1~7 사용 (0 무시)
+	colCounts := make([]int, 8)
+
+	// 행/열 분포 패턴별 카운트
+	rowPatternMap := make(map[string]int)
+	colPatternMap := make(map[string]int)
+
+	latestDrawNo := 0
+	for _, draw := range draws {
+		nums := draw.Numbers()
+		if draw.DrawNo > latestDrawNo {
+			latestDrawNo = draw.DrawNo
+		}
+
+		// 이번 회차의 행/열 분포
+		rowDist := make([]int, 8)
+		colDist := make([]int, 8)
+
+		for _, num := range nums {
+			row, col := getRowCol(num)
+			rowCounts[row]++
+			colCounts[col]++
+			rowDist[row]++
+			colDist[col]++
+		}
+
+		// 분포 패턴 문자열 생성
+		rowPattern := fmt.Sprintf("%d:%d:%d:%d:%d:%d:%d", rowDist[1], rowDist[2], rowDist[3], rowDist[4], rowDist[5], rowDist[6], rowDist[7])
+		colPattern := fmt.Sprintf("%d:%d:%d:%d:%d:%d:%d", colDist[1], colDist[2], colDist[3], colDist[4], colDist[5], colDist[6], colDist[7])
+
+		rowPatternMap[rowPattern]++
+		colPatternMap[colPattern]++
+	}
+
+	// 행별 통계
+	rowStats := make([]LineStat, 0, 7)
+	for i := 1; i <= 7; i++ {
+		prob := float64(rowCounts[i]) / float64(totalDraws*6) // 6개 번호 * 총 회차
+		rowStats = append(rowStats, LineStat{
+			Line:        i,
+			Count:       rowCounts[i],
+			Probability: prob,
+		})
+	}
+
+	// 열별 통계
+	colStats := make([]LineStat, 0, 7)
+	for i := 1; i <= 7; i++ {
+		prob := float64(colCounts[i]) / float64(totalDraws*6)
+		colStats = append(colStats, LineStat{
+			Line:        i,
+			Count:       colCounts[i],
+			Probability: prob,
+		})
+	}
+
+	// 행 분포 패턴 정렬
+	rowPatterns := make([]LineDistStat, 0, len(rowPatternMap))
+	for pattern, count := range rowPatternMap {
+		prob := float64(count) / float64(totalDraws)
+		rowPatterns = append(rowPatterns, LineDistStat{
+			Distribution: pattern,
+			Count:        count,
+			Probability:  prob,
+		})
+	}
+	sort.Slice(rowPatterns, func(i, j int) bool {
+		return rowPatterns[i].Count > rowPatterns[j].Count
+	})
+
+	// 열 분포 패턴 정렬
+	colPatterns := make([]LineDistStat, 0, len(colPatternMap))
+	for pattern, count := range colPatternMap {
+		prob := float64(count) / float64(totalDraws)
+		colPatterns = append(colPatterns, LineDistStat{
+			Distribution: pattern,
+			Count:        count,
+			Probability:  prob,
+		})
+	}
+	sort.Slice(colPatterns, func(i, j int) bool {
+		return colPatterns[i].Count > colPatterns[j].Count
+	})
+
+	if topN > len(rowPatterns) {
+		topN = len(rowPatterns)
+	}
+	topRowN := topN
+	if topN > len(colPatterns) {
+		topN = len(colPatterns)
+	}
+	topColN := topN
+
+	return &RowColStatsResponse{
+		RowStats:       rowStats,
+		ColStats:       colStats,
+		TopRowPatterns: rowPatterns[:topRowN],
+		TopColPatterns: colPatterns[:topColN],
+		TotalDraws:     totalDraws,
+		LatestDrawNo:   latestDrawNo,
+	}, nil
+}
+
 // RunFullAnalysis 전체 분석 실행 및 저장
 func (a *Analyzer) RunFullAnalysis(ctx context.Context) error {
 	a.log.Infof("RunFullAnalysis: starting full analysis")

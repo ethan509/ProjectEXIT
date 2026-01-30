@@ -634,6 +634,16 @@ func (s *Service) GetRatioStats(ctx context.Context) (*RatioStatsResponse, error
 	return s.analyzer.CalculateRatioStats(ctx)
 }
 
+// GetColorStats 색상 패턴 통계 조회
+func (s *Service) GetColorStats(ctx context.Context, topN int) (*ColorStatsResponse, error) {
+	return s.analyzer.CalculateColorStats(ctx, topN)
+}
+
+// GetRowColStats 행/열 분포 통계 조회
+func (s *Service) GetRowColStats(ctx context.Context, topN int) (*RowColStatsResponse, error) {
+	return s.analyzer.CalculateRowColStats(ctx, topN)
+}
+
 // TriggerSync 수동 동기화 (관리자용)
 func (s *Service) TriggerSync(ctx context.Context) error {
 	if err := s.FetchNewDraw(ctx); err != nil {

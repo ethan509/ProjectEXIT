@@ -91,6 +91,8 @@ func NewRouter(deps Dependencies) http.Handler {
 				r.Get("/stats/pairs", lottoHandler.GetPairStats)
 				r.Get("/stats/consecutive", lottoHandler.GetConsecutiveStats)
 				r.Get("/stats/ratio", lottoHandler.GetRatioStats)
+				r.Get("/stats/colors", lottoHandler.GetColorStats)
+				r.Get("/stats/grid", lottoHandler.GetRowColStats)
 			})
 
 			// admin lotto routes (protected)

@@ -110,6 +110,46 @@ type RatioStatsResponse struct {
 	LatestDrawNo int         `json:"latest_draw_no"`
 }
 
+// ColorPatternStat 색상 패턴별 통계
+// 한국 로또 공식 색상: 1~10(노랑Y), 11~20(파랑B), 21~30(빨강R), 31~40(회색G), 41~45(초록E)
+type ColorPatternStat struct {
+	Pattern     string  `json:"pattern"`     // 색상 패턴 (예: "YBRRGR")
+	Count       int     `json:"count"`       // 출현 횟수
+	Probability float64 `json:"probability"` // 확률
+}
+
+// ColorStatsResponse 색상 패턴 통계 응답
+type ColorStatsResponse struct {
+	TopPatterns  []ColorPatternStat `json:"top_patterns"`  // 가장 많이 나온 패턴
+	ColorCounts  map[string]int     `json:"color_counts"`  // 각 색상별 총 출현 횟수
+	TotalDraws   int                `json:"total_draws"`
+	LatestDrawNo int                `json:"latest_draw_no"`
+}
+
+// LineStat 행/열별 통계
+type LineStat struct {
+	Line        int     `json:"line"`        // 행 또는 열 번호 (1~7)
+	Count       int     `json:"count"`       // 해당 라인에 번호가 포함된 총 횟수
+	Probability float64 `json:"probability"` // 확률
+}
+
+// LineDistStat 행/열 분포별 통계 (예: "2:1:1:1:1:0:0" = 각 행에 몇 개)
+type LineDistStat struct {
+	Distribution string  `json:"distribution"` // 분포 패턴
+	Count        int     `json:"count"`        // 출현 횟수
+	Probability  float64 `json:"probability"`  // 확률
+}
+
+// RowColStatsResponse 행/열 분포 통계 응답 (7x7 격자 기준)
+type RowColStatsResponse struct {
+	RowStats       []LineStat     `json:"row_stats"`        // 각 행(1~7)별 통계
+	ColStats       []LineStat     `json:"col_stats"`        // 각 열(1~7)별 통계
+	TopRowPatterns []LineDistStat `json:"top_row_patterns"` // 가장 많이 나온 행 분포 패턴
+	TopColPatterns []LineDistStat `json:"top_col_patterns"` // 가장 많이 나온 열 분포 패턴
+	TotalDraws     int            `json:"total_draws"`
+	LatestDrawNo   int            `json:"latest_draw_no"`
+}
+
 // DhlotteryResponse 동행복권 API 응답
 type DhlotteryResponse struct {
 	ReturnValue    string `json:"returnValue"`
