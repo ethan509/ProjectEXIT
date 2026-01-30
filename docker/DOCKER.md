@@ -55,7 +55,7 @@ services:
     volumes:
       - db_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U devuser -d lottosmash_db"]
+      test: ["CMD-SHELL", "pg_isready -U lotto-user -d lottosmash_db"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -143,7 +143,7 @@ docker-compose restart app
 docker-compose exec app sh
 
 # DB 접속
-docker-compose exec db psql -U devuser -d lottosmash_db
+docker-compose exec db psql -U lotto-user -d lottosmash_db
 
 # 중지 및 삭제
 docker-compose down
@@ -224,8 +224,8 @@ docker inspect lottosmash-app | jq '.[0].State.Health'
 environment:
   # Database
   DB_HOST: db
-  DB_USER: devuser
-  DB_PASSWORD: devpassword
+  DB_USER: lotto-user
+  DB_PASSWORD: lotto-pw
   DB_NAME: lottosmash_db
 
   # Application (필요시 추가)
