@@ -45,6 +45,9 @@ COPY --from=builder /build/server /app/server
 # Copy config directory
 COPY config /app/config
 
+# Copy migrations directory
+COPY migrations /app/migrations
+
 # Create logs directory
 # RUN mkdir -p /app/logs && chown -R appuser:appgroup /app/logs
 
