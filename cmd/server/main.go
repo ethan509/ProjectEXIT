@@ -21,7 +21,7 @@ import (
 )
 
 func main() {
-	cfgPath := os.Getenv("LOTTOMASH_CONFIG")
+	cfgPath := os.Getenv("LOTTOSMASH_CONFIG")
 	if cfgPath == "" {
 		cfgPath = "config/config.json"
 	}

@@ -44,20 +44,20 @@ func Handler() http.Handler {
             avg = float64(dur) / float64(cnt) / 1e6 // ms
         }
 
-        fmt.Fprintf(w, "# HELP lottomash_current_concurrent_requests Current concurrent HTTP requests\n")
-        fmt.Fprintf(w, "# TYPE lottomash_current_concurrent_requests gauge\n")
-        fmt.Fprintf(w, "lottomash_current_concurrent_requests %d\n", c)
+        fmt.Fprintf(w, "# HELP lottosmash_current_concurrent_requests Current concurrent HTTP requests\n")
+        fmt.Fprintf(w, "# TYPE lottosmash_current_concurrent_requests gauge\n")
+        fmt.Fprintf(w, "lottosmash_current_concurrent_requests %d\n", c)
 
-        fmt.Fprintf(w, "# HELP lottomash_rejected_requests Rejected HTTP requests due to concurrency limit\n")
-        fmt.Fprintf(w, "# TYPE lottomash_rejected_requests counter\n")
-        fmt.Fprintf(w, "lottomash_rejected_requests %d\n", rej)
+        fmt.Fprintf(w, "# HELP lottosmash_rejected_requests Rejected HTTP requests due to concurrency limit\n")
+        fmt.Fprintf(w, "# TYPE lottosmash_rejected_requests counter\n")
+        fmt.Fprintf(w, "lottosmash_rejected_requests %d\n", rej)
 
-        fmt.Fprintf(w, "# HELP lottomash_request_avg_duration_millis Average HTTP request duration in ms\n")
-        fmt.Fprintf(w, "# TYPE lottomash_request_avg_duration_millis gauge\n")
-        fmt.Fprintf(w, "lottomash_request_avg_duration_millis %.3f\n", avg)
+        fmt.Fprintf(w, "# HELP lottosmash_request_avg_duration_millis Average HTTP request duration in ms\n")
+        fmt.Fprintf(w, "# TYPE lottosmash_request_avg_duration_millis gauge\n")
+        fmt.Fprintf(w, "lottosmash_request_avg_duration_millis %.3f\n", avg)
 
-        fmt.Fprintf(w, "# HELP lottomash_total_requests Total HTTP requests observed\n")
-        fmt.Fprintf(w, "# TYPE lottomash_total_requests counter\n")
-        fmt.Fprintf(w, "lottomash_total_requests %d\n", cnt)
+        fmt.Fprintf(w, "# HELP lottosmash_total_requests Total HTTP requests observed\n")
+        fmt.Fprintf(w, "# TYPE lottosmash_total_requests counter\n")
+        fmt.Fprintf(w, "lottosmash_total_requests %d\n", cnt)
     })
 }

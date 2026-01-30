@@ -55,7 +55,7 @@ services:
     volumes:
       - db_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U devuser -d lottomash_db"]
+      test: ["CMD-SHELL", "pg_isready -U devuser -d lottosmash_db"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -143,7 +143,7 @@ docker-compose restart app
 docker-compose exec app sh
 
 # DB 접속
-docker-compose exec db psql -U devuser -d lottomash_db
+docker-compose exec db psql -U devuser -d lottosmash_db
 
 # 중지 및 삭제
 docker-compose down
@@ -196,7 +196,7 @@ curl -X POST http://localhost:8080/api/v1/echo \
 ### Docker 헬스체크 상태 확인
 
 ```bash
-docker inspect lottomash-app | jq '.[0].State.Health'
+docker inspect lottosmash-app | jq '.[0].State.Health'
 ```
 
 ### 출력 예시
@@ -226,7 +226,7 @@ environment:
   DB_HOST: db
   DB_USER: devuser
   DB_PASSWORD: devpassword
-  DB_NAME: lottomash_db
+  DB_NAME: lottosmash_db
 
   # Application (필요시 추가)
   LOG_LEVEL: debug
@@ -381,13 +381,13 @@ services:
 docker swarm init
 
 # 스택 배포
-docker stack deploy -c docker-compose.yml lottomash
+docker stack deploy -c docker-compose.yml lottosmash
 
 # 서비스 확인
 docker service ls
 
 # 로그 확인
-docker service logs lottomash_app
+docker service logs lottosmash_app
 ```
 
 ### Kubernetes
@@ -401,7 +401,7 @@ kubectl apply -f .
 
 # 상태 확인
 kubectl get pods
-kubectl logs -f deployment/lottomash-app
+kubectl logs -f deployment/lottosmash-app
 ```
 
 ## 모니터링
@@ -410,10 +410,10 @@ kubectl logs -f deployment/lottomash-app
 
 ```bash
 # 실시간 리소스 사용량
-docker stats lottomash-app lottomash-db
+docker stats lottosmash-app lottosmash-db
 
 # 단일 컨테이너
-docker stats lottomash-app --no-stream
+docker stats lottosmash-app --no-stream
 ```
 
 ### Prometheus + Grafana

@@ -205,12 +205,12 @@ func NewMySQLPool(cfg Config) (*sqlx.DB, error) {
 services:
   db:
     image: mysql:8.0
-    container_name: lottomash-db
+    container_name: lottosmash-db
     ports:
       - "3306:3306"
     environment:
       MYSQL_ROOT_PASSWORD: rootpassword
-      MYSQL_DATABASE: lottomash_db
+      MYSQL_DATABASE: lottosmash_db
       MYSQL_USER: devuser
       MYSQL_PASSWORD: devpassword
     volumes:
@@ -284,13 +284,13 @@ func NewMongoClient(ctx context.Context, cfg Config) (*mongo.Client, error) {
 services:
   db:
     image: mongo:7
-    container_name: lottomash-db
+    container_name: lottosmash-db
     ports:
       - "27017:27017"
     environment:
       MONGO_INITDB_ROOT_USERNAME: devuser
       MONGO_INITDB_ROOT_PASSWORD: devpassword
-      MONGO_INITDB_DATABASE: lottomash_db
+      MONGO_INITDB_DATABASE: lottosmash_db
     volumes:
       - db_data:/data/db
     healthcheck:
@@ -345,10 +345,10 @@ DROP TABLE IF EXISTS users;
 
 ```bash
 # 적용
-migrate -path migrations -database "postgres://devuser:devpassword@localhost:5432/lottomash_db?sslmode=disable" up
+migrate -path migrations -database "postgres://devuser:devpassword@localhost:5432/lottosmash_db?sslmode=disable" up
 
 # 롤백
-migrate -path migrations -database "postgres://devuser:devpassword@localhost:5432/lottomash_db?sslmode=disable" down
+migrate -path migrations -database "postgres://devuser:devpassword@localhost:5432/lottosmash_db?sslmode=disable" down
 ```
 
 ---
@@ -592,7 +592,7 @@ DB_HOST=localhost
 DB_PORT=5432
 DB_USER=devuser
 DB_PASSWORD=devpassword
-DB_NAME=lottomash_db
+DB_NAME=lottosmash_db
 ```
 
 Docker Compose는 이미 설정되어 있습니다 (`docker/docker-compose.yml`).
@@ -605,10 +605,10 @@ Docker Compose는 이미 설정되어 있습니다 (`docker/docker-compose.yml`)
 
 ```bash
 # PostgreSQL 컨테이너 로그 확인
-docker logs lottomash-db
+docker logs lottosmash-db
 
 # DB 직접 접속 테스트
-docker exec -it lottomash-db psql -U devuser -d lottomash_db
+docker exec -it lottosmash-db psql -U devuser -d lottosmash_db
 ```
 
 ### 성능 최적화

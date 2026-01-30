@@ -11,6 +11,8 @@ feature/* → develop → main
 - 새 기능 개발 시 `feature/` 브랜치 생성
 - 작업 완료 후 `develop`에 먼저 머지
 - `develop`에서 `main`으로 머지
+- feature 브랜치 삭제금지
+- BRANCH_POLICY.md 내용 참조
 
 ## Project Structure
 
