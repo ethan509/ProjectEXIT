@@ -5,15 +5,15 @@ services:
     ports:
       - "5432:5432"
     environment:
-      POSTGRES_USER: lotto-user
-      POSTGRES_PASSWORD: lotto-pw
+      POSTGRES_USER: lottosmash
+      POSTGRES_PASSWORD: lottosmash_pw
       POSTGRES_DB: lottosmash_db
     volumes:
       - db_data:/var/lib/postgresql/data
       - ../migrations:/docker-entrypoint-initdb.d
     restart: always
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U lotto-user -d lottosmash_db"]
+      test: ["CMD-SHELL", "pg_isready -U lottosmash -d lottosmash_db"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -28,8 +28,8 @@ services:
       - "8080:8080"
     environment:
       DB_HOST: db
-      DB_USER: lotto-user
-      DB_PASSWORD: lotto-pw
+      DB_USER: lottosmash
+      DB_PASSWORD: lottosmash_pw
       DB_NAME: lottosmash_db
     depends_on:
       db:
