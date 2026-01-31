@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dir /s /b)",
+      "Bash(git fetch:*)",
+      "Bash(docker-compose:*)",
+      "Bash(curl:*)",
+      "Bash(git checkout:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nrefactor: rename ProjectEXIT/xxxdongxxx to LottoSmash\n\n- Update module name in go.mod to github.com/example/LottoSmash\n- Update all import paths across internal packages\n- Update container names: lottomash-app, lottomash-db\n- Update database name: lottomash_db\n- Update metrics prefix: lottomash_*\n- Update JWT issuer to LottoSmash\n- Update email templates\n- Update environment variable: LOTTOMASH_CONFIG\n- Update all documentation files\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git merge:*)",
+      "Bash(git commit:*)",
+      "Bash(docker compose:*)",
+      "Bash(go build:*)",
+      "Bash(docker logs:*)",
+      "Bash(docker exec:*)",
+      "Bash(go get:*)",
+      "Bash(git reset:*)",
+      "Bash(git stash:*)",
+      "Bash(git stash drop:*)",
+      "Bash(go mod verify:*)",
+      "Bash(docker ps:*)",
+      "Bash(ls -la \"d:\\\\Dev\\\\git\\\\git_ethan509\\\\LottoSmash\\\\logs\"\" 2>/dev/null || echo \"Local logs dir empty or not exist \")",
+      "Bash(go run:*)",
+      "Bash(ls:*)"
+    ]
+  }
+}
