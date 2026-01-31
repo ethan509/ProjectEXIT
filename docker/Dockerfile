@@ -48,6 +48,9 @@ COPY config /app/config
 # Copy migrations directory
 COPY migrations /app/migrations
 
+# Copy docs directory (CSV files)
+COPY docs /app/docs
+
 # Create logs directory
 # RUN mkdir -p /app/logs && chown -R appuser:appgroup /app/logs
 
