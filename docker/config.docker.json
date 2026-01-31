@@ -30,7 +30,7 @@
   },
   "database": {
     "host": "db",
-    "port": 5432,
+    "port": 5434,
     "user": "lottosmash",
     "password": "lottosmash_pw",
     "dbName": "lottosmash_db",

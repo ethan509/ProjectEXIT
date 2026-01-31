@@ -70,7 +70,7 @@ All Docker-related files are located in the `docker/` directory:
 ### Services
 
 - **app**: LottoSmash server (port 8080)
-- **db**: PostgreSQL 15 (port 5432)
+- **db**: PostgreSQL 15 (port 5434)
 
 ### Available Make Commands
 

@@ -3,11 +3,12 @@ services:
     image: postgres:15-alpine
     container_name: lottosmash-db
     ports:
-      - "5434:5432"
+      - "5434:5434"
     environment:
       POSTGRES_USER: lottosmash
       POSTGRES_PASSWORD: lottosmash_pw
       POSTGRES_DB: lottosmash_db
+      PGPORT: 5434
     volumes:
       - db_data:/var/lib/postgresql/data
       - ../migrations:/docker-entrypoint-initdb.d
@@ -31,12 +32,14 @@ services:
       DB_USER: lottosmash
       DB_PASSWORD: lottosmash_pw
       DB_NAME: lottosmash_db
+      DB_PORT: 5434
     depends_on:
       db:
         condition: service_healthy
     volumes:
       - ../logs:/app/logs
       - ../config/config.json:/app/config/config.json
+      - ../docs:/app/docs
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/healthz"]

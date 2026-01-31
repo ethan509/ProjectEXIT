@@ -15,6 +15,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/example/LottoSmash/internal/constants"
 	"github.com/example/LottoSmash/internal/logger"
 	"golang.org/x/text/encoding/korean"
 	"golang.org/x/text/transform"
@@ -26,6 +27,10 @@ type Service struct {
 	analyzer *Analyzer
 	log      *logger.Logger
 	docsPath string
+
+	// Crawler settings
+	CrawlerBatchSize  int
+	CrawlerBatchDelay time.Duration
 }
 
 func NewService(repo *Repository, client *Client, analyzer *Analyzer, log *logger.Logger) *Service {
@@ -37,12 +42,19 @@ func NewService(repo *Repository, client *Client, analyzer *Analyzer, log *logge
 	}
 }
 
-// InitializeDraws 서버 시작 시 당첨번호 초기화
+// InitializeDraws 서버 시작 시 당첨번호 데이터 동기화 및 최신화
 func (s *Service) InitializeDraws(ctx context.Context, docsPath string) error {
 	s.docsPath = docsPath
-	s.log.Infof("initializing lotto draws...")
+	// 기본값 설정 (설정 파일에서 주입되지 않았을 경우)
+	if s.CrawlerBatchSize <= 0 {
+		s.CrawlerBatchSize = 10
+	}
+	if s.CrawlerBatchDelay <= 0 {
+		s.CrawlerBatchDelay = 2 * time.Second
+	}
 
-	// 1. lotto_draw 테이블에 최신정보(현재날짜의 가장 최근 토요일 기준)까지 적재되어 있는지 확인
+	s.log.Infof("initializing lotto draws... (BatchSize: %d)", s.CrawlerBatchSize)
+
 	expectedDrawNo := s.calculateExpectedDrawNo()
 
 	latestInDB, err := s.repo.GetLatestDrawNo(ctx)
@@ -50,101 +62,66 @@ func (s *Service) InitializeDraws(ctx context.Context, docsPath string) error {
 		return fmt.Errorf("failed to get latest draw from DB: %w", err)
 	}
 
+	// 1. DB가 비어있거나 데이터가 부족하면 번들 CSV 우선 로드 시도
+	if latestInDB == 0 || latestInDB < expectedDrawNo {
+		s.log.Infof("Checking bundled CSV for faster initialization...")
+		bundledDraws, err := s.loadBundledCSV()
+		if err == nil && len(bundledDraws) > 0 {
+			// 번들 데이터 DB 저장 (ON CONFLICT DO NOTHING)
+			if err := s.repo.InsertDraws(ctx, bundledDraws); err != nil {
+				s.log.Errorf("failed to insert bundled draws: %v", err)
+			} else {
+				s.log.Infof("Loaded %d draws from bundled CSV", len(bundledDraws))
+				// DB 상태 갱신
+				latestInDB, _ = s.repo.GetLatestDrawNo(ctx)
+			}
+		} else {
+			s.log.Infof("No bundled CSV found or failed to load: %v", err)
+		}
+	}
+
 	s.log.Infof("Draw status - DB: %d, Expected: %d", latestInDB, expectedDrawNo)
 
-	if latestInDB >= expectedDrawNo {
-		s.log.Infof("DB is up to date.")
-		// 초기화 시에도 분석 실행
-		return s.RunAnalysis(ctx)
-	}
+	// 2. 여전히 부족한 회차가 있다면 크롤링 (배치 처리)
+	if latestInDB < expectedDrawNo {
+		from := latestInDB + 1
+		to := expectedDrawNo
+		s.log.Infof("Fetching missing draws from %d to %d in batches of %d...", from, to, s.CrawlerBatchSize)
 
-	// 2. 없으면 csv 파일 확인
-	s.log.Infof("DB is outdated. Checking CSV files in %s...", docsPath)
-
-	// 디버깅: docs 폴더 파일 목록 출력 (파일이 존재하는지 확인)
-	entries, err := os.ReadDir(docsPath)
-	if err == nil {
-		s.log.Infof("Found %d files in %s:", len(entries), docsPath)
-		for _, e := range entries {
-			s.log.Infof(" - %s", e.Name())
-		}
-	} else {
-		s.log.Errorf("Failed to read docs dir: %v", err)
-	}
-
-	csvLoaded := false
-	// 파일 검색 로직 개선 (대소문자 구분 없이 .csv 확인)
-	if err == nil {
-		for _, entry := range entries {
-			if entry.IsDir() || !strings.HasSuffix(strings.ToLower(entry.Name()), ".csv") {
-				continue
+		for start := from; start <= to; start += s.CrawlerBatchSize {
+			end := start + s.CrawlerBatchSize - 1
+			if end > to {
+				end = to
 			}
-			csvPath := filepath.Join(docsPath, entry.Name())
-			s.log.Infof("Found candidate CSV: %s", entry.Name())
 
-			if err := s.loadFromCSV(ctx, csvPath); err == nil {
-				s.log.Infof("Successfully loaded draws from csv: %s", filepath.Base(csvPath))
-				csvLoaded = true
-				break
-			} else {
-				s.log.Infof("Failed to load CSV %s: %v", filepath.Base(csvPath), err)
-				s.log.Errorf("Failed to load CSV %s: %v", filepath.Base(csvPath), err)
+			s.log.Infof("Fetching batch: %d ~ %d", start, end)
+			draws, err := s.client.FetchDrawRange(ctx, start, end)
+			if err != nil {
+				return fmt.Errorf("failed to fetch batch %d-%d: %w", start, end, err)
 			}
-		}
-	} else {
-		s.log.Infof("No CSV files found in %s", docsPath)
-	}
 
-	if csvLoaded {
-		latestInDB, err = s.repo.GetLatestDrawNo(ctx)
-		if err != nil {
-			return fmt.Errorf("failed to get latest draw from DB after CSV load: %w", err)
-		}
-		if latestInDB >= expectedDrawNo {
-			s.log.Infof("DB is up to date after CSV load.")
-			return nil
-		}
-	}
-
-	// 3. csv 파일에도 없으면 사이트에서 정보 가져오고 csv 파일 업데이트 그리고 db update
-	s.log.Infof("DB still outdated (DB: %d, Expected: %d). Fetching from external source...", latestInDB, expectedDrawNo)
-
-	s.log.Infof("Attempting to fetch missing draws (from %d to %d) from external site...", latestInDB+1, expectedDrawNo)
-
-	// 누락분 가져오기 (DB 저장은 fetchAndSaveDraws 내부에서 수행)
-	if err := s.fetchAndSaveDraws(ctx, latestInDB+1, expectedDrawNo); err != nil {
-		s.log.Infof("Failed to fetch draws from external site: %v", err)
-		s.log.Errorf("failed to fetch draws from API: %v", err)
-		// API 실패 시 스크래핑 시도 (마지막 1회차인 경우)
-		if expectedDrawNo-latestInDB == 1 {
-			s.log.Infof("trying to scrape latest draw %d...", expectedDrawNo)
-			scraped, errScrape := s.scrapeLatestDraw(ctx)
-			if errScrape == nil && scraped.DrawNo == expectedDrawNo {
-				if errSave := s.repo.SaveDraw(ctx, scraped); errSave == nil {
-					s.log.Infof("saved scraped draw %d", scraped.DrawNo)
+			if len(draws) > 0 {
+				if err := s.repo.InsertDraws(ctx, draws); err != nil {
+					return fmt.Errorf("failed to insert batch %d-%d: %w", start, end, err)
 				}
+				s.log.Infof("Saved batch %d-%d (%d draws)", start, end, len(draws))
+			}
+
+			// 배치 간 딜레이
+			if end < to {
+				time.Sleep(s.CrawlerBatchDelay)
 			}
 		}
 	} else {
-		s.log.Infof("Successfully fetched and saved draws from external site.")
+		s.log.Infof("DB is already up to date.")
 	}
 
-	// 최종 확인: 여전히 최신 데이터가 없으면 에러 반환
-	finalLatest, err := s.repo.GetLatestDrawNo(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to verify final DB state: %w", err)
-	}
-
-	if finalLatest < expectedDrawNo {
-		return fmt.Errorf("failed to initialize draws: could not fetch up to draw %d (current: %d)", expectedDrawNo, finalLatest)
-	}
-
-	// CSV 파일 업데이트
+	// 3. CSV 파일 동기화 (DB -> CSV)
+	// 크롤링이나 번들 로드로 인해 DB가 변경되었을 수 있으므로 CSV를 재생성
 	if err := s.updateCSVFile(ctx); err != nil {
-		return err
+		s.log.Errorf("Failed to update CSV file: %v", err)
 	}
 
-	// 초기 데이터 로드 후 분석 실행
 	return s.RunAnalysis(ctx)
 }
 
@@ -319,7 +296,7 @@ func (s *Service) parseCSV(r io.Reader) ([]LottoDraw, error) {
 
 // scrapeLatestDraw 웹사이트에서 최신 당첨번호 스크래핑
 func (s *Service) scrapeLatestDraw(ctx context.Context) (*LottoDraw, error) {
-	url := "https://www.dhlottery.co.kr/gameResult.do?method=byWin"
+	url := constants.DHLotteryLatestURL
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, err
@@ -398,17 +375,8 @@ func (s *Service) updateCSVFile(ctx context.Context) error {
 		return fmt.Errorf("failed to get all draws: %w", err)
 	}
 
-	// 최신 회차 찾기
-	maxNo := 0
-	for _, d := range draws {
-		if d.DrawNo > maxNo {
-			maxNo = d.DrawNo
-		}
-	}
-
-	// 새 파일명 생성
-	newFileName := fmt.Sprintf("로또 회차별 당첨번호_1_%d.csv", maxNo)
-	newFilePath := filepath.Join(s.docsPath, newFileName)
+	// 파일 경로 설정 (constants에서 파일명 가져옴)
+	newFilePath := filepath.Join(s.docsPath, constants.LottoCSVFileName)
 
 	// 파일 생성 및 쓰기
 	f, err := os.Create(newFilePath)
@@ -454,19 +422,7 @@ func (s *Service) updateCSVFile(ctx context.Context) error {
 		return err
 	}
 
-	// 기존 파일 정리 (다른 이름의 CSV 삭제)
-	matches, _ := filepath.Glob(filepath.Join(s.docsPath, "로또 회차별 당첨번호*.csv"))
-	for _, m := range matches {
-		if m != newFilePath {
-			if err := os.Remove(m); err != nil {
-				s.log.Errorf("failed to remove old csv %s: %v", m, err)
-			} else {
-				s.log.Infof("removed old csv: %s", filepath.Base(m))
-			}
-		}
-	}
-
-	s.log.Infof("updated csv file: %s", newFileName)
+	s.log.Infof("updated csv file: %s", constants.LottoCSVFileName)
 	return nil
 }
 
@@ -693,8 +649,8 @@ func (s *Service) saveDrawsToCSV(ctx context.Context, draws []LottoDraw) error {
 		return fmt.Errorf("docs path not initialized")
 	}
 
-	// 파일명: lotto_draws_YYYYMMDD.csv
-	filename := fmt.Sprintf("lotto_draws_%s.csv", time.Now().Format("20060102"))
+	// 파일명: lotto_draws.csv (고정)
+	filename := constants.LottoCSVFileName
 	filePath := filepath.Join(s.docsPath, filename)
 
 	file, err := os.Create(filePath)
@@ -743,4 +699,51 @@ func (s *Service) saveDrawsToCSV(ctx context.Context, draws []LottoDraw) error {
 
 	s.log.Infof("CSV file saved: %s", filePath)
 	return nil
+}
+
+// loadBundledCSV 번들된 기본 CSV 파일에서 로또 데이터 로드 (fallback)
+func (s *Service) loadBundledCSV() ([]LottoDraw, error) {
+	// CSV 파일 경로 (constants에서 파일명 가져옴)
+	candidates := []string{
+		filepath.Join(s.docsPath, constants.LottoCSVFileName),
+	}
+
+	var lastErr error
+	for _, csvPath := range candidates {
+		content, err := os.ReadFile(csvPath)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+
+		// remove BOM if present
+		if bytes.HasPrefix(content, []byte{0xEF, 0xBB, 0xBF}) {
+			content = content[3:]
+		}
+
+		var reader io.Reader
+		if utf8.Valid(content) {
+			reader = bytes.NewReader(content)
+		} else {
+			reader = transform.NewReader(bytes.NewReader(content), korean.EUCKR.NewDecoder())
+		}
+
+		draws, err := s.parseCSV(reader)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+
+		if len(draws) > 0 {
+			// Ensure all draws have valid draw_date (parseCSV should have calculated it)
+			for i := range draws {
+				if draws[i].DrawDate == "" {
+					baseDate := time.Date(2002, 12, 7, 0, 0, 0, 0, time.UTC)
+					draws[i].DrawDate = baseDate.AddDate(0, 0, (draws[i].DrawNo-1)*7).Format("2006.01.02")
+				}
+			}
+			return draws, nil
+		}
+	}
+	return nil, fmt.Errorf("failed to load bundled CSV: %w", lastErr)
 }

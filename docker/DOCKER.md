@@ -51,7 +51,9 @@ services:
   db:
     image: postgres:15-alpine
     ports:
-      - "5432:5432"
+      - "5434:5434"
+    environment:
+      PGPORT: 5434
     volumes:
       - db_data:/var/lib/postgresql/data
     healthcheck:
@@ -71,15 +73,17 @@ services:
 ```yaml
 services:
   app:
-    build: .
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
     ports:
       - "8080:8080"
     depends_on:
       db:
         condition: service_healthy
     volumes:
-      - ./logs:/app/logs
-      - ./config:/app/config
+      - ../logs:/app/logs
+      - ../config:/app/config
     healthcheck:
       test: ["CMD", "wget", "--spider", "http://localhost:8080/healthz"]
       interval: 30s
@@ -227,6 +231,7 @@ environment:
   DB_USER: lottosmash
   DB_PASSWORD: lottosmash_pw
   DB_NAME: lottosmash_db
+  DB_PORT: 5434
 
   # Application (필요시 추가)
   LOG_LEVEL: debug

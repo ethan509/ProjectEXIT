@@ -70,10 +70,16 @@ type SMTPConfig struct {
 	From     string `json:"from"`
 }
 
+type CrawlerConfig struct {
+	BatchSize    int `json:"batchSize"`    // 배치당 크롤링할 회차 수
+	BatchDelayMs int `json:"batchDelayMs"` // 배치 간 딜레이 (밀리초)
+}
+
 type Config struct {
 	Server       ServerConfig       `json:"server"`
 	Logging      LoggingConfig      `json:"logging"`
 	Concurrency  ConcurrencyConfig  `json:"concurrency"`
+	Crawler      CrawlerConfig      `json:"crawler"`
 	Scheduler    SchedulerConfig    `json:"scheduler"`
 	ConfigReload ConfigReloadConfig `json:"configReload"`
 	Database     DatabaseConfig     `json:"database"`
@@ -185,6 +191,12 @@ func validate(c *Config) error {
 	}
 	if c.Concurrency.ExternalChannelSize <= 0 {
 		c.Concurrency.ExternalChannelSize = 256
+	}
+	if c.Crawler.BatchSize <= 0 {
+		c.Crawler.BatchSize = 10
+	}
+	if c.Crawler.BatchDelayMs <= 0 {
+		c.Crawler.BatchDelayMs = 2000
 	}
 	if c.Scheduler.Timezone == "" {
 		c.Scheduler.Timezone = "Asia/Seoul"

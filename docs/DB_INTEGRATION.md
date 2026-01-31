@@ -345,10 +345,10 @@ DROP TABLE IF EXISTS users;
 
 ```bash
 # 적용
-migrate -path migrations -database "postgres://lottosmash:lottosmash_pw@localhost:5432/lottosmash_db?sslmode=disable" up
+migrate -path migrations -database "postgres://lottosmash:lottosmash_pw@localhost:5434/lottosmash_db?sslmode=disable" up
 
 # 롤백
-migrate -path migrations -database "postgres://lottosmash:lottosmash_pw@localhost:5432/lottosmash_db?sslmode=disable" down
+migrate -path migrations -database "postgres://lottosmash:lottosmash_pw@localhost:5434/lottosmash_db?sslmode=disable" down
 ```
 
 ---
@@ -589,7 +589,7 @@ poolConfig.HealthCheckPeriod = time.Minute     // 헬스체크 주기
 
 ```bash
 DB_HOST=localhost
-DB_PORT=5432
+DB_PORT=5434
 DB_USER=lottosmash
 DB_PASSWORD=lottosmash_pw
 DB_NAME=lottosmash_db

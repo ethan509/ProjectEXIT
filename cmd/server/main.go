@@ -131,6 +131,11 @@ func main() {
 		lottoAnalyzer := lotto.NewAnalyzer(lottoRepo, lg)
 		lottoSvc = lotto.NewService(lottoRepo, lottoClient, lottoAnalyzer, lg)
 
+		// config에서 크롤러 설정 주입
+		crawlerCfg := cfgMgr.Config().Crawler
+		lottoSvc.CrawlerBatchSize = crawlerCfg.BatchSize
+		lottoSvc.CrawlerBatchDelay = time.Duration(crawlerCfg.BatchDelayMs) * time.Millisecond
+
 		// 서버 시작 시 당첨번호 초기화
 		docsPath := cfgMgr.ResolvePath("docs")
 		if err := lottoSvc.InitializeDraws(ctx, docsPath); err != nil {

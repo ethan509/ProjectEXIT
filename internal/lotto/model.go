@@ -191,7 +191,7 @@ func (r *DhlotteryResponse) ToLottoDraw() (*LottoDraw, error) {
 		return nil, err
 	}
 
-	return &LottoDraw{
+	draw := &LottoDraw{
 		DrawNo:       r.DrwNo,
 		DrawDate:     drawDate.Format("2006.01.02"),
 		Num1:         r.DrwtNo1,
@@ -203,7 +203,13 @@ func (r *DhlotteryResponse) ToLottoDraw() (*LottoDraw, error) {
 		BonusNum:     r.BnusNo,
 		FirstPrize:   r.FirstAccumamnt,
 		FirstWinners: r.FirstPrzwnerCo,
-	}, nil
+	}
+
+	if draw.FirstWinners > 0 {
+		draw.FirstPerGame = draw.FirstPrize / int64(draw.FirstWinners)
+	}
+
+	return draw, nil
 }
 
 // DrawListResponse 당첨번호 목록 응답

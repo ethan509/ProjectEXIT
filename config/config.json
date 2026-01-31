@@ -16,9 +16,13 @@
     "dbWorkerCount": 5,
     "externalWorkerCount": 5
   },
+  "crawler": {
+    "batchSize": 10,
+    "batchDelayMs": 2000
+  },
   "database": {
     "host": "db",
-    "port": 5432,
+    "port": 5434,
     "user": "lottosmash",
     "password": "lottosmash_pw",
     "dbName": "lottosmash_db",
