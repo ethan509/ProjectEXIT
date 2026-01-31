@@ -266,6 +266,22 @@ type BayesianStat struct {
 	CalculatedAt time.Time `json:"calculated_at"`
 }
 
+// AnalysisStat 통합 분석 통계 (회차별, 번호별)
+// 모든 분석 결과를 하나의 테이블에 저장
+type AnalysisStat struct {
+	DrawNo        int       `json:"draw_no"`        // 회차 번호
+	Number        int       `json:"number"`         // 번호 (1~45)
+	TotalCount    int       `json:"total_count"`    // 누적 출현 횟수
+	BonusCount    int       `json:"bonus_count"`    // 보너스 출현 횟수
+	ReappearTotal int       `json:"reappear_total"` // 재등장 기준 총 출현
+	ReappearCount int       `json:"reappear_count"` // 재등장 횟수
+	ReappearProb  float64   `json:"reappear_prob"`  // 재등장 확률
+	BayesianPrior float64   `json:"bayesian_prior"` // 베이지안 사전 확률
+	BayesianPost  float64   `json:"bayesian_post"`  // 베이지안 사후 확률
+	Appeared      bool      `json:"appeared"`       // 해당 회차 출현 여부
+	CalculatedAt  time.Time `json:"calculated_at"`
+}
+
 // UnclaimedPrize 미수령 당첨금
 type UnclaimedPrize struct {
 	ID             int64     `json:"id"`

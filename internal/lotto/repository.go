@@ -638,3 +638,178 @@ func (r *Repository) GetLatestBayesianDrawNo(ctx context.Context) (int, error) {
 	}
 	return drawNo, nil
 }
+
+// Unified Analysis Stats Methods
+
+// GetLatestAnalysisStats 가장 최근 회차의 통합 분석 통계 조회 (45개 번호 전체)
+func (r *Repository) GetLatestAnalysisStats(ctx context.Context) ([]AnalysisStat, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT draw_no, number, total_count, bonus_count,
+		        reappear_total, reappear_count, reappear_prob,
+		        bayesian_prior, bayesian_post, appeared, calculated_at
+		 FROM lotto_analysis_stats
+		 WHERE draw_no = (SELECT COALESCE(MAX(draw_no), 0) FROM lotto_analysis_stats)
+		 ORDER BY number ASC`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var stats []AnalysisStat
+	for rows.Next() {
+		var stat AnalysisStat
+		var bayesianPrior, bayesianPost sql.NullFloat64
+		if err := rows.Scan(
+			&stat.DrawNo, &stat.Number, &stat.TotalCount, &stat.BonusCount,
+			&stat.ReappearTotal, &stat.ReappearCount, &stat.ReappearProb,
+			&bayesianPrior, &bayesianPost, &stat.Appeared, &stat.CalculatedAt,
+		); err != nil {
+			return nil, err
+		}
+		if bayesianPrior.Valid {
+			stat.BayesianPrior = bayesianPrior.Float64
+		}
+		if bayesianPost.Valid {
+			stat.BayesianPost = bayesianPost.Float64
+		}
+		stats = append(stats, stat)
+	}
+	return stats, rows.Err()
+}
+
+// GetAnalysisStatsByDrawNo 특정 회차의 통합 분석 통계 조회
+func (r *Repository) GetAnalysisStatsByDrawNo(ctx context.Context, drawNo int) ([]AnalysisStat, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT draw_no, number, total_count, bonus_count,
+		        reappear_total, reappear_count, reappear_prob,
+		        bayesian_prior, bayesian_post, appeared, calculated_at
+		 FROM lotto_analysis_stats
+		 WHERE draw_no = $1
+		 ORDER BY number ASC`, drawNo,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var stats []AnalysisStat
+	for rows.Next() {
+		var stat AnalysisStat
+		var bayesianPrior, bayesianPost sql.NullFloat64
+		if err := rows.Scan(
+			&stat.DrawNo, &stat.Number, &stat.TotalCount, &stat.BonusCount,
+			&stat.ReappearTotal, &stat.ReappearCount, &stat.ReappearProb,
+			&bayesianPrior, &bayesianPost, &stat.Appeared, &stat.CalculatedAt,
+		); err != nil {
+			return nil, err
+		}
+		if bayesianPrior.Valid {
+			stat.BayesianPrior = bayesianPrior.Float64
+		}
+		if bayesianPost.Valid {
+			stat.BayesianPost = bayesianPost.Float64
+		}
+		stats = append(stats, stat)
+	}
+	return stats, rows.Err()
+}
+
+// UpsertAnalysisStats 통합 분석 통계 일괄 저장/업데이트
+func (r *Repository) UpsertAnalysisStats(ctx context.Context, stats []AnalysisStat) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	stmt, err := tx.PrepareContext(ctx,
+		`INSERT INTO lotto_analysis_stats (
+			draw_no, number, total_count, bonus_count,
+			reappear_total, reappear_count, reappear_prob,
+			bayesian_prior, bayesian_post, appeared, calculated_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
+		ON CONFLICT (draw_no, number) DO UPDATE SET
+			total_count = EXCLUDED.total_count,
+			bonus_count = EXCLUDED.bonus_count,
+			reappear_total = EXCLUDED.reappear_total,
+			reappear_count = EXCLUDED.reappear_count,
+			reappear_prob = EXCLUDED.reappear_prob,
+			bayesian_prior = EXCLUDED.bayesian_prior,
+			bayesian_post = EXCLUDED.bayesian_post,
+			appeared = EXCLUDED.appeared,
+			calculated_at = NOW(),
+			updated_at = NOW()`,
+	)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	for _, stat := range stats {
+		_, err := stmt.ExecContext(ctx,
+			stat.DrawNo, stat.Number, stat.TotalCount, stat.BonusCount,
+			stat.ReappearTotal, stat.ReappearCount, stat.ReappearProb,
+			stat.BayesianPrior, stat.BayesianPost, stat.Appeared,
+		)
+		if err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit()
+}
+
+// GetAnalysisStatsHistory 특정 번호의 분석 통계 히스토리 조회
+func (r *Repository) GetAnalysisStatsHistory(ctx context.Context, number int, limit int) ([]AnalysisStat, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT draw_no, number, total_count, bonus_count,
+		        reappear_total, reappear_count, reappear_prob,
+		        bayesian_prior, bayesian_post, appeared, calculated_at
+		 FROM lotto_analysis_stats
+		 WHERE number = $1
+		 ORDER BY draw_no DESC
+		 LIMIT $2`, number, limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var stats []AnalysisStat
+	for rows.Next() {
+		var stat AnalysisStat
+		var bayesianPrior, bayesianPost sql.NullFloat64
+		if err := rows.Scan(
+			&stat.DrawNo, &stat.Number, &stat.TotalCount, &stat.BonusCount,
+			&stat.ReappearTotal, &stat.ReappearCount, &stat.ReappearProb,
+			&bayesianPrior, &bayesianPost, &stat.Appeared, &stat.CalculatedAt,
+		); err != nil {
+			return nil, err
+		}
+		if bayesianPrior.Valid {
+			stat.BayesianPrior = bayesianPrior.Float64
+		}
+		if bayesianPost.Valid {
+			stat.BayesianPost = bayesianPost.Float64
+		}
+		stats = append(stats, stat)
+	}
+	return stats, rows.Err()
+}
+
+// GetLatestAnalysisDrawNo 통합 분석 통계가 계산된 가장 최근 회차 번호 조회
+func (r *Repository) GetLatestAnalysisDrawNo(ctx context.Context) (int, error) {
+	var drawNo int
+	err := r.db.QueryRowContext(ctx,
+		"SELECT COALESCE(MAX(draw_no), 0) FROM lotto_analysis_stats",
+	).Scan(&drawNo)
+	if err != nil {
+		return 0, err
+	}
+	return drawNo, nil
+}
