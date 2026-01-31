@@ -234,8 +234,8 @@ func (s *Service) parseCSV(r io.Reader) ([]LottoDraw, error) {
 			continue
 		}
 
-		if len(record) < 12 {
-			s.log.Errorf("Skipping line %d: insufficient columns (got %d, want 12+)", line, len(record))
+		if len(record) < 11 {
+			s.log.Errorf("Skipping line %d: insufficient columns (got %d, want 11+)", line, len(record))
 			continue
 		}
 
@@ -275,16 +275,25 @@ func (s *Service) parseCSV(r io.Reader) ([]LottoDraw, error) {
 			continue
 		}
 
-		// 순위(Index 9)는 "1등"이므로 저장하지 않음
-		// 당첨자수 (Index 10): "6 명" -> "명" 제거
-		if draw.FirstWinners, err = strconv.Atoi(cleanNum(record[10])); err != nil {
-			s.log.Errorf("Skipping line %d: invalid winners '%s'", line, record[10])
+		// 컬럼 인덱스 설정 (순위 컬럼 유무에 따라 동적 처리)
+		// 기존: ..., 보너스(8), 순위(9), 당첨자수(10), 당첨금(11)
+		// 변경: ..., 보너스(8), 당첨자수(9), 당첨금(10)
+		idxWinners := 9
+		idxPrize := 10
+		if len(record) >= 12 {
+			idxWinners = 10
+			idxPrize = 11
+		}
+
+		// 당첨자수: "6 명" -> "명" 제거
+		if draw.FirstWinners, err = strconv.Atoi(cleanNum(record[idxWinners])); err != nil {
+			s.log.Errorf("Skipping line %d: invalid winners '%s'", line, record[idxWinners])
 			continue
 		}
 
-		// 당첨금액 (Index 11): "5,001,713,625 원" -> 콤마(,)와 "원" 제거
-		if draw.FirstPrize, err = strconv.ParseInt(cleanNum(record[11]), 10, 64); err != nil {
-			s.log.Errorf("Skipping line %d: invalid prize '%s'", line, record[11])
+		// 당첨금액: "5,001,713,625 원" -> 콤마(,)와 "원" 제거
+		if draw.FirstPrize, err = strconv.ParseInt(cleanNum(record[idxPrize]), 10, 64); err != nil {
+			s.log.Errorf("Skipping line %d: invalid prize '%s'", line, record[idxPrize])
 			continue
 		}
 
@@ -393,7 +402,7 @@ func (s *Service) updateCSVFile(ctx context.Context) error {
 	w := csv.NewWriter(f)
 
 	// 헤더 작성
-	header := []string{"No", "회차", "번호1", "번호2", "번호3", "번호4", "번호5", "번호6", "보너스", "순위", "1등당첨자수", "1등당첨금"}
+	header := []string{"No", "회차", "번호1", "번호2", "번호3", "번호4", "번호5", "번호6", "보너스", "1등당첨자수", "1등당첨금"}
 	if err := w.Write(header); err != nil {
 		return err
 	}
@@ -409,7 +418,6 @@ func (s *Service) updateCSVFile(ctx context.Context) error {
 			strconv.Itoa(d.Num5),
 			strconv.Itoa(d.Num6),
 			strconv.Itoa(d.BonusNum),
-			"1등", // 순위
 			strconv.Itoa(d.FirstWinners),
 			strconv.FormatInt(d.FirstPrize, 10),
 		}
