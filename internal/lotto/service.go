@@ -656,3 +656,91 @@ func (s *Service) TriggerSync(ctx context.Context) error {
 	}
 	return s.RunAnalysis(ctx)
 }
+
+// FetchAndSaveAllDraws 1회차부터 최신까지 전부 가져오기
+func (s *Service) FetchAndSaveAllDraws(ctx context.Context) error {
+	s.log.Infof("Starting full lotto draw crawl from 1st to latest...")
+
+	// 모든 당첨번호 조회
+	draws, err := s.client.FetchAllDraws(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to fetch all draws: %w", err)
+	}
+
+	s.log.Infof("Successfully fetched %d draws", len(draws))
+
+	// DB에 저장
+	if err := s.repo.InsertDraws(ctx, draws); err != nil {
+		return fmt.Errorf("failed to save draws to DB: %w", err)
+	}
+
+	s.log.Infof("Saved %d draws to database", len(draws))
+
+	// CSV 파일로 저장
+	if err := s.saveDrawsToCSV(ctx, draws); err != nil {
+		return fmt.Errorf("failed to save draws to CSV: %w", err)
+	}
+
+	s.log.Infof("Saved %d draws to CSV file", len(draws))
+
+	// 분석 실행
+	return s.RunAnalysis(ctx)
+}
+
+// saveDrawsToCSV 당첨번호를 CSV 파일로 저장
+func (s *Service) saveDrawsToCSV(ctx context.Context, draws []LottoDraw) error {
+	if s.docsPath == "" {
+		return fmt.Errorf("docs path not initialized")
+	}
+
+	// 파일명: lotto_draws_YYYYMMDD.csv
+	filename := fmt.Sprintf("lotto_draws_%s.csv", time.Now().Format("20060102"))
+	filePath := filepath.Join(s.docsPath, filename)
+
+	file, err := os.Create(filePath)
+	if err != nil {
+		return fmt.Errorf("failed to create CSV file: %w", err)
+	}
+	defer file.Close()
+
+	// UTF-8 BOM 추가 (Excel 호환성)
+	file.WriteString("\xef\xbb\xbf")
+
+	w := csv.NewWriter(file)
+	defer w.Flush()
+
+	// 헤더 작성
+	header := []string{
+		"회차", "추첨일", "1번", "2번", "3번", "4번", "5번", "6번", "보너스",
+		"1등당첨금", "1등당첨자", "1등1게임당",
+		"2등당첨금", "2등당첨자", "2등1게임당",
+		"3등당첨금", "3등당첨자", "3등1게임당",
+		"4등당첨금", "4등당첨자", "4등1게임당",
+		"5등당첨금", "5등당첨자", "5등1게임당",
+	}
+	if err := w.Write(header); err != nil {
+		return fmt.Errorf("failed to write CSV header: %w", err)
+	}
+
+	// 데이터 작성
+	for _, draw := range draws {
+		record := []string{
+			strconv.Itoa(draw.DrawNo),
+			draw.DrawDate,
+			strconv.Itoa(draw.Num1), strconv.Itoa(draw.Num2), strconv.Itoa(draw.Num3),
+			strconv.Itoa(draw.Num4), strconv.Itoa(draw.Num5), strconv.Itoa(draw.Num6),
+			strconv.Itoa(draw.BonusNum),
+			strconv.FormatInt(draw.FirstPrize, 10), strconv.Itoa(draw.FirstWinners), strconv.FormatInt(draw.FirstPerGame, 10),
+			strconv.FormatInt(draw.SecondPrize, 10), strconv.Itoa(draw.SecondWinners), strconv.FormatInt(draw.SecondPerGame, 10),
+			strconv.FormatInt(draw.ThirdPrize, 10), strconv.Itoa(draw.ThirdWinners), strconv.FormatInt(draw.ThirdPerGame, 10),
+			strconv.FormatInt(draw.FourthPrize, 10), strconv.Itoa(draw.FourthWinners), strconv.FormatInt(draw.FourthPerGame, 10),
+			strconv.FormatInt(draw.FifthPrize, 10), strconv.Itoa(draw.FifthWinners), strconv.FormatInt(draw.FifthPerGame, 10),
+		}
+		if err := w.Write(record); err != nil {
+			return fmt.Errorf("failed to write CSV record: %w", err)
+		}
+	}
+
+	s.log.Infof("CSV file saved: %s", filePath)
+	return nil
+}

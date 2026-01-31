@@ -12,8 +12,26 @@ CREATE TABLE IF NOT EXISTS lotto_draws (
     num5            SMALLINT NOT NULL,
     num6            SMALLINT NOT NULL,
     bonus_num       SMALLINT NOT NULL,
+    -- 1등 정보
     first_prize     BIGINT,
     first_winners   INTEGER,
+    first_per_game  BIGINT,
+    -- 2등 정보 (보너스번호 포함)
+    second_prize    BIGINT,
+    second_winners  INTEGER,
+    second_per_game BIGINT,
+    -- 3등 정보
+    third_prize     BIGINT,
+    third_winners   INTEGER,
+    third_per_game  BIGINT,
+    -- 4등 정보
+    fourth_prize    BIGINT,
+    fourth_winners  INTEGER,
+    fourth_per_game BIGINT,
+    -- 5등 정보
+    fifth_prize     BIGINT,
+    fifth_winners   INTEGER,
+    fifth_per_game  BIGINT,
     created_at      TIMESTAMP DEFAULT NOW(),
     updated_at      TIMESTAMP DEFAULT NOW()
 );

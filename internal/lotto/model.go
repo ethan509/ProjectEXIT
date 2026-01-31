@@ -4,17 +4,35 @@ import "time"
 
 // LottoDraw 로또 당첨번호
 type LottoDraw struct {
-	DrawNo       int       `json:"draw_no"`
-	DrawDate     string    `json:"draw_date"`
-	Num1         int       `json:"num1"`
-	Num2         int       `json:"num2"`
-	Num3         int       `json:"num3"`
-	Num4         int       `json:"num4"`
-	Num5         int       `json:"num5"`
-	Num6         int       `json:"num6"`
-	BonusNum     int       `json:"bonus_num"`
-	FirstPrize   int64     `json:"first_prize"`
-	FirstWinners int       `json:"first_winners"`
+	DrawNo   int    `json:"draw_no"`
+	DrawDate string `json:"draw_date"`
+	Num1     int    `json:"num1"`
+	Num2     int    `json:"num2"`
+	Num3     int    `json:"num3"`
+	Num4     int    `json:"num4"`
+	Num5     int    `json:"num5"`
+	Num6     int    `json:"num6"`
+	BonusNum int    `json:"bonus_num"`
+	// 1등 정보
+	FirstPrize   int64 `json:"first_prize"`
+	FirstWinners int   `json:"first_winners"`
+	FirstPerGame int64 `json:"first_per_game"`
+	// 2등 정보
+	SecondPrize   int64 `json:"second_prize"`
+	SecondWinners int   `json:"second_winners"`
+	SecondPerGame int64 `json:"second_per_game"`
+	// 3등 정보
+	ThirdPrize   int64 `json:"third_prize"`
+	ThirdWinners int   `json:"third_winners"`
+	ThirdPerGame int64 `json:"third_per_game"`
+	// 4등 정보
+	FourthPrize   int64 `json:"fourth_prize"`
+	FourthWinners int   `json:"fourth_winners"`
+	FourthPerGame int64 `json:"fourth_per_game"`
+	// 5등 정보
+	FifthPrize   int64     `json:"fifth_prize"`
+	FifthWinners int       `json:"fifth_winners"`
+	FifthPerGame int64     `json:"fifth_per_game"`
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
 }
@@ -120,8 +138,8 @@ type ColorPatternStat struct {
 
 // ColorStatsResponse 색상 패턴 통계 응답
 type ColorStatsResponse struct {
-	TopPatterns  []ColorPatternStat `json:"top_patterns"`  // 가장 많이 나온 패턴
-	ColorCounts  map[string]int     `json:"color_counts"`  // 각 색상별 총 출현 횟수
+	TopPatterns  []ColorPatternStat `json:"top_patterns"` // 가장 많이 나온 패턴
+	ColorCounts  map[string]int     `json:"color_counts"` // 각 색상별 총 출현 횟수
 	TotalDraws   int                `json:"total_draws"`
 	LatestDrawNo int                `json:"latest_draw_no"`
 }
@@ -206,16 +224,16 @@ type StatsResponse struct {
 // BayesianNumberStat 베이지안 추론 기반 번호별 통계
 // P(θ|D) ∝ P(D|θ)P(θ) - 사후확률은 우도와 사전확률의 곱에 비례
 type BayesianNumberStat struct {
-	Number           int     `json:"number"`            // 번호 (1~45)
-	Prior            float64 `json:"prior"`             // 사전 확률 P(θ) = 1/45
-	Likelihood       float64 `json:"likelihood"`        // 우도 P(D|θ) - 최근 N회차 출현 빈도
-	Posterior        float64 `json:"posterior"`         // 사후 확률 P(θ|D)
-	RecentCount      int     `json:"recent_count"`      // 최근 N회차 출현 횟수
-	ExpectedCount    float64 `json:"expected_count"`    // 기대 출현 횟수
-	Deviation        float64 `json:"deviation"`         // 편차 (실제 - 기대)
-	Status           string  `json:"status"`            // HOT, COLD, NEUTRAL
-	LastAppearDrawNo int     `json:"last_appear_draw"`  // 마지막 출현 회차
-	GapSinceLastDraw int     `json:"gap_since_last"`    // 마지막 출현 후 경과 회차
+	Number           int     `json:"number"`           // 번호 (1~45)
+	Prior            float64 `json:"prior"`            // 사전 확률 P(θ) = 1/45
+	Likelihood       float64 `json:"likelihood"`       // 우도 P(D|θ) - 최근 N회차 출현 빈도
+	Posterior        float64 `json:"posterior"`        // 사후 확률 P(θ|D)
+	RecentCount      int     `json:"recent_count"`     // 최근 N회차 출현 횟수
+	ExpectedCount    float64 `json:"expected_count"`   // 기대 출현 횟수
+	Deviation        float64 `json:"deviation"`        // 편차 (실제 - 기대)
+	Status           string  `json:"status"`           // HOT, COLD, NEUTRAL
+	LastAppearDrawNo int     `json:"last_appear_draw"` // 마지막 출현 회차
+	GapSinceLastDraw int     `json:"gap_since_last"`   // 마지막 출현 후 경과 회차
 }
 
 // BayesianStatsResponse 베이지안 분석 응답
@@ -226,4 +244,18 @@ type BayesianStatsResponse struct {
 	WindowSize   int                  `json:"window_size"`    // 분석 윈도우 크기 (최근 N회차)
 	TotalDraws   int                  `json:"total_draws"`    // 전체 회차 수
 	LatestDrawNo int                  `json:"latest_draw_no"` // 최신 회차 번호
+}
+
+// UnclaimedPrize 미수령 당첨금
+type UnclaimedPrize struct {
+	ID             int64     `json:"id"`
+	DrawNo         int       `json:"draw_no"`
+	PrizeRank      int       `json:"prize_rank"`      // 1등 또는 2등
+	Amount         int64     `json:"amount"`          // 당첨금
+	WinnerName     *string   `json:"winner_name"`     // 당첨자명 (마스킹됨, 예: 김**)
+	WinningDate    string    `json:"winning_date"`    // 당첨일
+	ExpirationDate string    `json:"expiration_date"` // 만기일
+	Status         string    `json:"status"`          // unclaimed, claimed 등
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
 }

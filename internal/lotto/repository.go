@@ -302,3 +302,201 @@ func (r *Repository) UpsertReappearStats(ctx context.Context, stats []ReappearSt
 
 	return tx.Commit()
 }
+
+// InsertDraw 당첨번호 저장
+func (r *Repository) InsertDraw(ctx context.Context, draw *LottoDraw) error {
+	query := `
+		INSERT INTO lotto_draws (
+			draw_no, draw_date, num1, num2, num3, num4, num5, num6,
+			bonus_num, first_prize, first_winners, first_per_game,
+			second_prize, second_winners, second_per_game,
+			third_prize, third_winners, third_per_game,
+			fourth_prize, fourth_winners, fourth_per_game,
+			fifth_prize, fifth_winners, fifth_per_game,
+			created_at, updated_at
+		) VALUES (
+			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24,
+			NOW(), NOW()
+		) ON CONFLICT (draw_no) DO UPDATE SET
+			draw_date = EXCLUDED.draw_date,
+			num1 = EXCLUDED.num1, num2 = EXCLUDED.num2, num3 = EXCLUDED.num3,
+			num4 = EXCLUDED.num4, num5 = EXCLUDED.num5, num6 = EXCLUDED.num6,
+			bonus_num = EXCLUDED.bonus_num,
+			first_prize = EXCLUDED.first_prize, first_winners = EXCLUDED.first_winners, first_per_game = EXCLUDED.first_per_game,
+			second_prize = EXCLUDED.second_prize, second_winners = EXCLUDED.second_winners, second_per_game = EXCLUDED.second_per_game,
+			third_prize = EXCLUDED.third_prize, third_winners = EXCLUDED.third_winners, third_per_game = EXCLUDED.third_per_game,
+			fourth_prize = EXCLUDED.fourth_prize, fourth_winners = EXCLUDED.fourth_winners, fourth_per_game = EXCLUDED.fourth_per_game,
+			fifth_prize = EXCLUDED.fifth_prize, fifth_winners = EXCLUDED.fifth_winners, fifth_per_game = EXCLUDED.fifth_per_game,
+			updated_at = NOW()
+	`
+	_, err := r.db.ExecContext(ctx, query,
+		draw.DrawNo, draw.DrawDate,
+		draw.Num1, draw.Num2, draw.Num3, draw.Num4, draw.Num5, draw.Num6,
+		draw.BonusNum,
+		draw.FirstPrize, draw.FirstWinners, draw.FirstPerGame,
+		draw.SecondPrize, draw.SecondWinners, draw.SecondPerGame,
+		draw.ThirdPrize, draw.ThirdWinners, draw.ThirdPerGame,
+		draw.FourthPrize, draw.FourthWinners, draw.FourthPerGame,
+		draw.FifthPrize, draw.FifthWinners, draw.FifthPerGame,
+	)
+	return err
+}
+
+// InsertDraws 여러 당첨번호 일괄 저장
+func (r *Repository) InsertDraws(ctx context.Context, draws []LottoDraw) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	stmt, err := tx.PrepareContext(ctx, `
+		INSERT INTO lotto_draws (
+			draw_no, draw_date, num1, num2, num3, num4, num5, num6,
+			bonus_num, first_prize, first_winners, first_per_game,
+			second_prize, second_winners, second_per_game,
+			third_prize, third_winners, third_per_game,
+			fourth_prize, fourth_winners, fourth_per_game,
+			fifth_prize, fifth_winners, fifth_per_game,
+			created_at, updated_at
+		) VALUES (
+			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24,
+			NOW(), NOW()
+		) ON CONFLICT (draw_no) DO NOTHING
+	`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	for _, draw := range draws {
+		_, err := stmt.ExecContext(ctx,
+			draw.DrawNo, draw.DrawDate,
+			draw.Num1, draw.Num2, draw.Num3, draw.Num4, draw.Num5, draw.Num6,
+			draw.BonusNum,
+			draw.FirstPrize, draw.FirstWinners, draw.FirstPerGame,
+			draw.SecondPrize, draw.SecondWinners, draw.SecondPerGame,
+			draw.ThirdPrize, draw.ThirdWinners, draw.ThirdPerGame,
+			draw.FourthPrize, draw.FourthWinners, draw.FourthPerGame,
+			draw.FifthPrize, draw.FifthWinners, draw.FifthPerGame,
+		)
+		if err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit()
+}
+
+// UnclaimedPrize Methods
+
+// GetUnclaimedPrizes 미수령 당첨금 조회 (모두)
+func (r *Repository) GetUnclaimedPrizes(ctx context.Context) ([]UnclaimedPrize, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT id, draw_no, prize_rank, amount, winner_name, winning_date, expiration_date, status, created_at, updated_at
+		 FROM unclaimed_prizes WHERE status = 'unclaimed' ORDER BY expiration_date ASC`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var prizes []UnclaimedPrize
+	for rows.Next() {
+		var prize UnclaimedPrize
+		if err := rows.Scan(
+			&prize.ID, &prize.DrawNo, &prize.PrizeRank, &prize.Amount, &prize.WinnerName,
+			&prize.WinningDate, &prize.ExpirationDate, &prize.Status, &prize.CreatedAt, &prize.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		prizes = append(prizes, prize)
+	}
+	return prizes, rows.Err()
+}
+
+// GetUnclaimedPrizesByDrawNo 특정 회차의 미수령 당첨금 조회
+func (r *Repository) GetUnclaimedPrizesByDrawNo(ctx context.Context, drawNo int) ([]UnclaimedPrize, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT id, draw_no, prize_rank, amount, winner_name, winning_date, expiration_date, status, created_at, updated_at
+		 FROM unclaimed_prizes WHERE draw_no = $1 AND status = 'unclaimed'`, drawNo,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var prizes []UnclaimedPrize
+	for rows.Next() {
+		var prize UnclaimedPrize
+		if err := rows.Scan(
+			&prize.ID, &prize.DrawNo, &prize.PrizeRank, &prize.Amount, &prize.WinnerName,
+			&prize.WinningDate, &prize.ExpirationDate, &prize.Status, &prize.CreatedAt, &prize.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		prizes = append(prizes, prize)
+	}
+	return prizes, rows.Err()
+}
+
+// InsertUnclaimedPrize 미수령 당첨금 저장
+func (r *Repository) InsertUnclaimedPrize(ctx context.Context, prize *UnclaimedPrize) error {
+	query := `
+		INSERT INTO unclaimed_prizes (
+			draw_no, prize_rank, amount, winner_name, winning_date, expiration_date, status, created_at, updated_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
+		ON CONFLICT DO NOTHING
+	`
+	_, err := r.db.ExecContext(ctx, query,
+		prize.DrawNo, prize.PrizeRank, prize.Amount, prize.WinnerName,
+		prize.WinningDate, prize.ExpirationDate, prize.Status,
+	)
+	return err
+}
+
+// InsertUnclaimedPrizes 미수령 당첨금 일괄 저장
+func (r *Repository) InsertUnclaimedPrizes(ctx context.Context, prizes []UnclaimedPrize) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	stmt, err := tx.PrepareContext(ctx, `
+		INSERT INTO unclaimed_prizes (
+			draw_no, prize_rank, amount, winner_name, winning_date, expiration_date, status, created_at, updated_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
+		ON CONFLICT DO NOTHING
+	`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	for _, prize := range prizes {
+		_, err := stmt.ExecContext(ctx,
+			prize.DrawNo, prize.PrizeRank, prize.Amount, prize.WinnerName,
+			prize.WinningDate, prize.ExpirationDate, prize.Status,
+		)
+		if err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit()
+}
+
+// UpdateUnclaimedPrizeStatus 미수령 당첨금 상태 업데이트
+func (r *Repository) UpdateUnclaimedPrizeStatus(ctx context.Context, prizeID int64, status string) error {
+	query := `UPDATE unclaimed_prizes SET status = $1, updated_at = NOW() WHERE id = $2`
+	_, err := r.db.ExecContext(ctx, query, status, prizeID)
+	return err
+}
+
+// DeleteExpiredUnclaimedPrizes 만기 지난 미수령 당첨금 삭제
+func (r *Repository) DeleteExpiredUnclaimedPrizes(ctx context.Context) error {
+	query := `DELETE FROM unclaimed_prizes WHERE expiration_date < NOW() AND status = 'unclaimed'`
+	_, err := r.db.ExecContext(ctx, query)
+	return err
+}

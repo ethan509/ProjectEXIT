@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -145,13 +146,18 @@ func (c *Client) fetchDrawFromHTML(ctx context.Context, drawNo int) (*LottoDraw,
 		nums[i], _ = strconv.Atoi(ballMatches[i][1])
 	}
 
-	return &LottoDraw{
+	draw := &LottoDraw{
 		DrawNo:   parsedDrawNo,
 		DrawDate: drawDate,
 		Num1:     nums[0], Num2: nums[1], Num3: nums[2],
 		Num4: nums[3], Num5: nums[4], Num6: nums[5],
 		BonusNum: nums[6],
-	}, nil
+	}
+
+	// 당첨금 및 당첨자 정보 파싱
+	c.parsePrizeInfo(body, draw)
+
+	return draw, nil
 }
 
 // FetchDrawWithRetry 재시도 로직이 포함된 당첨번호 조회
@@ -220,6 +226,18 @@ func (c *Client) FetchLatestDrawNo(ctx context.Context) (int, error) {
 	return low, nil
 }
 
+// FetchAllDraws 1회차부터 최신 회차까지 모든 당첨번호 조회
+func (c *Client) FetchAllDraws(ctx context.Context) ([]LottoDraw, error) {
+	// 최신 회차 번호 조회
+	latestDrawNo, err := c.FetchLatestDrawNo(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch latest draw number: %w", err)
+	}
+
+	// 1회차부터 최신 회차까지 조회
+	return c.FetchDrawRange(ctx, 1, latestDrawNo)
+}
+
 // FetchDrawRange 범위 내 당첨번호 일괄 조회
 func (c *Client) FetchDrawRange(ctx context.Context, from, to int) ([]LottoDraw, error) {
 	var draws []LottoDraw
@@ -240,4 +258,86 @@ func (c *Client) FetchDrawRange(ctx context.Context, from, to int) ([]LottoDraw,
 	}
 
 	return draws, nil
+}
+
+// parsePrizeInfo HTML에서 상금 및 당첨자 정보 파싱
+func (c *Client) parsePrizeInfo(htmlBody string, draw *LottoDraw) {
+	// 당첨금 정보 테이블 구조:
+	// 1등 당첨금: <td class="tdn"> ... 원</td>
+	// 당첨자: <td class="tdm"> ... 명</td>
+	// 1게임당: <td class="tdn"> ... 원</td>
+	// 이를 2~5등까지 반복
+
+	// 상금 추출 (쉼표와 '원' 제거) - 총 당첨금과 1게임당 당첨금
+	rePrice := regexp.MustCompile(`<td[^>]*>([0-9,]+)원</td>`)
+	priceMatches := rePrice.FindAllStringSubmatch(htmlBody, -1)
+
+	// 당첨게임수 (명) 추출
+	reWinners := regexp.MustCompile(`<td[^>]*>([0-9,]+)명</td>`)
+	winnersMatches := reWinners.FindAllStringSubmatch(htmlBody, -1)
+
+	// 패턴: [총당첨금, 1게임당, 당첨게임수] × 5등급
+	// priceMatches: 0=1등총, 1=1등개별, 2=2등총, 3=2등개별, ...
+	// winnersMatches: 0=1등명, 1=2등명, 2=3등명, 3=4등명, 4=5등명
+
+	// 1등
+	if len(priceMatches) >= 2 {
+		draw.FirstPrize = parsePrice(priceMatches[0][1])
+		draw.FirstPerGame = parsePrice(priceMatches[1][1])
+	}
+	if len(winnersMatches) >= 1 {
+		draw.FirstWinners = parseCount(winnersMatches[0][1])
+	}
+
+	// 2등
+	if len(priceMatches) >= 4 {
+		draw.SecondPrize = parsePrice(priceMatches[2][1])
+		draw.SecondPerGame = parsePrice(priceMatches[3][1])
+	}
+	if len(winnersMatches) >= 2 {
+		draw.SecondWinners = parseCount(winnersMatches[1][1])
+	}
+
+	// 3등
+	if len(priceMatches) >= 6 {
+		draw.ThirdPrize = parsePrice(priceMatches[4][1])
+		draw.ThirdPerGame = parsePrice(priceMatches[5][1])
+	}
+	if len(winnersMatches) >= 3 {
+		draw.ThirdWinners = parseCount(winnersMatches[2][1])
+	}
+
+	// 4등
+	if len(priceMatches) >= 8 {
+		draw.FourthPrize = parsePrice(priceMatches[6][1])
+		draw.FourthPerGame = parsePrice(priceMatches[7][1])
+	}
+	if len(winnersMatches) >= 4 {
+		draw.FourthWinners = parseCount(winnersMatches[3][1])
+	}
+
+	// 5등
+	if len(priceMatches) >= 10 {
+		draw.FifthPrize = parsePrice(priceMatches[8][1])
+		draw.FifthPerGame = parsePrice(priceMatches[9][1])
+	}
+	if len(winnersMatches) >= 5 {
+		draw.FifthWinners = parseCount(winnersMatches[4][1])
+	}
+}
+
+// parsePrice 가격 문자열 파싱 (쉼표 제거)
+func parsePrice(priceStr string) int64 {
+	// 쉼표 제거
+	cleaned := strings.ReplaceAll(priceStr, ",", "")
+	price, _ := strconv.ParseInt(cleaned, 10, 64)
+	return price
+}
+
+// parseCount 개수 문자열 파싱 (쉼표 제거)
+func parseCount(countStr string) int {
+	// 쉼표 제거
+	cleaned := strings.ReplaceAll(countStr, ",", "")
+	count, _ := strconv.Atoi(cleaned)
+	return count
 }
