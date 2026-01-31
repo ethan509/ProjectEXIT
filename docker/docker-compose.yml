@@ -3,7 +3,7 @@ services:
     image: postgres:15-alpine
     container_name: lottosmash-db
     ports:
-      - "5432:5432"
+      - "5434:5432"
     environment:
       POSTGRES_USER: lottosmash
       POSTGRES_PASSWORD: lottosmash_pw
