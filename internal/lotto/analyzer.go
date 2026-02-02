@@ -1227,10 +1227,17 @@ func (a *Analyzer) CalculateUnifiedStats(ctx context.Context) error {
 			totalTrials := float64(drawNo * 6)
 			posterior := (alpha + float64(newCount)) / (alpha + beta + totalTrials)
 
+			// 출현 확률 계산: total_count / (draw_no * 6)
+			var totalProb float64
+			if totalTrials > 0 {
+				totalProb = float64(newCount) / totalTrials
+			}
+
 			newStat := AnalysisStat{
 				DrawNo:        drawNo,
 				Number:        num,
 				TotalCount:    newCount,
+				TotalProb:     totalProb,
 				BonusCount:    newBonusCount,
 				FirstCount:    newFirstCount,
 				LastCount:     newLastCount,
@@ -1343,10 +1350,17 @@ func (a *Analyzer) CalculateFullUnifiedStats(ctx context.Context) error {
 
 			posterior := (alpha + float64(count)) / (alpha + beta + totalTrials)
 
+			// 출현 확률 계산: total_count / (draw_no * 6)
+			var totalProb float64
+			if totalTrials > 0 {
+				totalProb = float64(count) / totalTrials
+			}
+
 			newStats = append(newStats, AnalysisStat{
 				DrawNo:        draw.DrawNo,
 				Number:        num,
 				TotalCount:    count,
+				TotalProb:     totalProb,
 				BonusCount:    bonusCountMap[num],
 				FirstCount:    firstCountMap[num],
 				LastCount:     lastCountMap[num],
@@ -1371,4 +1385,43 @@ func (a *Analyzer) CalculateFullUnifiedStats(ctx context.Context) error {
 
 	a.log.Infof("CalculateFullUnifiedStats: completed successfully (%d draws)", len(draws))
 	return nil
+}
+
+// FixZeroProbabilityStats total_prob이 0인 행을 찾아서 수정
+// 이미 total_count 값이 있는 행의 확률을 재계산하여 업데이트
+func (a *Analyzer) FixZeroProbabilityStats(ctx context.Context) (int, error) {
+	a.log.Infof("FixZeroProbabilityStats: starting")
+
+	// total_prob이 0인 행 조회
+	zeroStats, err := a.repo.GetAnalysisStatsWithZeroProb(ctx)
+	if err != nil {
+		a.log.Errorf("FixZeroProbabilityStats: failed to get zero prob stats: %v", err)
+		return 0, err
+	}
+
+	if len(zeroStats) == 0 {
+		a.log.Infof("FixZeroProbabilityStats: no rows with zero probability found")
+		return 0, nil
+	}
+
+	a.log.Infof("FixZeroProbabilityStats: found %d rows with zero probability", len(zeroStats))
+
+	// 확률 재계산
+	updates := make([]AnalysisStat, 0, len(zeroStats))
+	for _, stat := range zeroStats {
+		totalTrials := float64(stat.DrawNo * 6)
+		if totalTrials > 0 {
+			stat.TotalProb = float64(stat.TotalCount) / totalTrials
+		}
+		updates = append(updates, stat)
+	}
+
+	// DB 업데이트
+	if err := a.repo.UpdateAnalysisStatsTotalProb(ctx, updates); err != nil {
+		a.log.Errorf("FixZeroProbabilityStats: failed to update stats: %v", err)
+		return 0, err
+	}
+
+	a.log.Infof("FixZeroProbabilityStats: updated %d rows successfully", len(updates))
+	return len(updates), nil
 }

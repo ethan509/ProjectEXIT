@@ -272,6 +272,7 @@ type AnalysisStat struct {
 	DrawNo        int       `json:"draw_no"`        // 회차 번호
 	Number        int       `json:"number"`         // 번호 (1~45)
 	TotalCount    int       `json:"total_count"`    // 누적 출현 횟수
+	TotalProb     float64   `json:"total_prob"`     // 출현 확률 (total_count / (draw_no * 6))
 	BonusCount    int       `json:"bonus_count"`    // 보너스 출현 횟수
 	FirstCount    int       `json:"first_count"`    // 첫번째 위치(Num1)로 나온 누적 횟수
 	LastCount     int       `json:"last_count"`     // 마지막 위치(Num6)로 나온 누적 횟수
