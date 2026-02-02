@@ -1233,12 +1233,19 @@ func (a *Analyzer) CalculateUnifiedStats(ctx context.Context) error {
 				totalProb = float64(newCount) / totalTrials
 			}
 
+			// 보너스 출현 확률 계산: bonus_count / draw_no
+			var bonusProb float64
+			if drawNo > 0 {
+				bonusProb = float64(newBonusCount) / float64(drawNo)
+			}
+
 			newStat := AnalysisStat{
 				DrawNo:        drawNo,
 				Number:        num,
 				TotalCount:    newCount,
 				TotalProb:     totalProb,
 				BonusCount:    newBonusCount,
+				BonusProb:     bonusProb,
 				FirstCount:    newFirstCount,
 				LastCount:     newLastCount,
 				ReappearTotal: newReappearTotal,
@@ -1356,12 +1363,19 @@ func (a *Analyzer) CalculateFullUnifiedStats(ctx context.Context) error {
 				totalProb = float64(count) / totalTrials
 			}
 
+			// 보너스 출현 확률 계산: bonus_count / draw_no
+			var bonusProb float64
+			if draw.DrawNo > 0 {
+				bonusProb = float64(bonusCountMap[num]) / float64(draw.DrawNo)
+			}
+
 			newStats = append(newStats, AnalysisStat{
 				DrawNo:        draw.DrawNo,
 				Number:        num,
 				TotalCount:    count,
 				TotalProb:     totalProb,
 				BonusCount:    bonusCountMap[num],
+				BonusProb:     bonusProb,
 				FirstCount:    firstCountMap[num],
 				LastCount:     lastCountMap[num],
 				ReappearTotal: reappearTotalMap[num],
@@ -1423,5 +1437,43 @@ func (a *Analyzer) FixZeroProbabilityStats(ctx context.Context) (int, error) {
 	}
 
 	a.log.Infof("FixZeroProbabilityStats: updated %d rows successfully", len(updates))
+	return len(updates), nil
+}
+
+// FixZeroBonusProbabilityStats bonus_prob이 0인 행을 찾아서 수정
+// 이미 bonus_count 값이 있는 행의 확률을 재계산하여 업데이트
+func (a *Analyzer) FixZeroBonusProbabilityStats(ctx context.Context) (int, error) {
+	a.log.Infof("FixZeroBonusProbabilityStats: starting")
+
+	// bonus_prob이 0인 행 조회
+	zeroStats, err := a.repo.GetAnalysisStatsWithZeroBonusProb(ctx)
+	if err != nil {
+		a.log.Errorf("FixZeroBonusProbabilityStats: failed to get zero bonus prob stats: %v", err)
+		return 0, err
+	}
+
+	if len(zeroStats) == 0 {
+		a.log.Infof("FixZeroBonusProbabilityStats: no rows with zero bonus probability found")
+		return 0, nil
+	}
+
+	a.log.Infof("FixZeroBonusProbabilityStats: found %d rows with zero bonus probability", len(zeroStats))
+
+	// 확률 재계산
+	updates := make([]AnalysisStat, 0, len(zeroStats))
+	for _, stat := range zeroStats {
+		if stat.DrawNo > 0 {
+			stat.BonusProb = float64(stat.BonusCount) / float64(stat.DrawNo)
+		}
+		updates = append(updates, stat)
+	}
+
+	// DB 업데이트
+	if err := a.repo.UpdateAnalysisStatsBonusProb(ctx, updates); err != nil {
+		a.log.Errorf("FixZeroBonusProbabilityStats: failed to update stats: %v", err)
+		return 0, err
+	}
+
+	a.log.Infof("FixZeroBonusProbabilityStats: updated %d rows successfully", len(updates))
 	return len(updates), nil
 }
