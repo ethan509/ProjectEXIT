@@ -1,4 +1,4 @@
--- 013_create_pair_stats.up.sql
+-- 007_create_pair_stats.sql
 -- 번호 쌍 동시출현 통계 테이블
 
 CREATE TABLE IF NOT EXISTS lotto_pair_stats (

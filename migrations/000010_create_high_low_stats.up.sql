@@ -1,4 +1,4 @@
--- 016_create_high_low_stats.up.sql
+-- 010_create_high_low_stats.sql
 -- 고저 비율 통계 테이블 (회차별 고번호:저번호 비율 확률 추이)
 -- 고번호: 23~45, 저번호: 1~22
 
