@@ -2256,3 +2256,247 @@ func (a *Analyzer) FixZeroOddEvenProbability(ctx context.Context) (int, error) {
 	a.log.Infof("FixZeroOddEvenProbability: updated %d rows successfully", len(zeroStats))
 	return len(zeroStats), nil
 }
+
+// countHighNumbers 6개 번호에서 고번호(23~45) 개수 계산
+func countHighNumbers(nums []int) int {
+	count := 0
+	for _, n := range nums {
+		if n >= 23 {
+			count++
+		}
+	}
+	return count
+}
+
+// highLowRatioKey 고저 비율 키 생성 (예: "3:3")
+func highLowRatioKey(highCount int) string {
+	lowCount := 6 - highCount
+	return fmt.Sprintf("%d:%d", highCount, lowCount)
+}
+
+// CalculateHighLowStatsDB 고저 비율 통계 증분 계산 (새 회차만)
+func (a *Analyzer) CalculateHighLowStatsDB(ctx context.Context) error {
+	a.log.Infof("CalculateHighLowStatsDB: starting incremental calculation")
+
+	// 가장 최근 계산된 회차 조회
+	lastCalcDrawNo, err := a.repo.GetLatestHighLowStatsDrawNo(ctx)
+	if err != nil {
+		a.log.Errorf("CalculateHighLowStatsDB: failed to get latest draw no: %v", err)
+		return err
+	}
+
+	// 전체 계산이 필요한 경우 (테이블이 비어있는 경우)
+	if lastCalcDrawNo == 0 {
+		a.log.Infof("CalculateHighLowStatsDB: no existing data, running full calculation")
+		return a.CalculateFullHighLowStatsDB(ctx)
+	}
+
+	// 가장 최신 당첨번호 회차 조회
+	latestDrawNo, err := a.repo.GetLatestDrawNo(ctx)
+	if err != nil {
+		a.log.Errorf("CalculateHighLowStatsDB: failed to get latest draw no: %v", err)
+		return err
+	}
+
+	if lastCalcDrawNo >= latestDrawNo {
+		a.log.Infof("CalculateHighLowStatsDB: already up to date (draw %d)", lastCalcDrawNo)
+		return nil
+	}
+
+	// 이전 회차의 통계 조회
+	prevStat, err := a.repo.GetHighLowStatsByDrawNo(ctx, lastCalcDrawNo)
+	if err != nil {
+		a.log.Errorf("CalculateHighLowStatsDB: failed to get previous stats: %v", err)
+		return err
+	}
+
+	// 누적 카운트 초기화
+	count0_6, count1_5, count2_4, count3_3, count4_2, count5_1, count6_0 := 0, 0, 0, 0, 0, 0, 0
+	if prevStat != nil {
+		count0_6 = prevStat.Count0_6
+		count1_5 = prevStat.Count1_5
+		count2_4 = prevStat.Count2_4
+		count3_3 = prevStat.Count3_3
+		count4_2 = prevStat.Count4_2
+		count5_1 = prevStat.Count5_1
+		count6_0 = prevStat.Count6_0
+	}
+
+	// 새 회차들 계산
+	for drawNo := lastCalcDrawNo + 1; drawNo <= latestDrawNo; drawNo++ {
+		draw, err := a.repo.GetDrawByNo(ctx, drawNo)
+		if err != nil {
+			a.log.Warnf("CalculateHighLowStatsDB: skipping draw %d: %v", drawNo, err)
+			continue
+		}
+
+		// 고번호 개수 계산
+		nums := draw.Numbers()
+		highCount := countHighNumbers(nums)
+		ratio := highLowRatioKey(highCount)
+
+		// 해당 비율의 카운트 증가
+		switch highCount {
+		case 0:
+			count0_6++
+		case 1:
+			count1_5++
+		case 2:
+			count2_4++
+		case 3:
+			count3_3++
+		case 4:
+			count4_2++
+		case 5:
+			count5_1++
+		case 6:
+			count6_0++
+		}
+
+		// 확률 계산
+		newStat := HighLowStatDB{
+			DrawNo:      drawNo,
+			ActualRatio: ratio,
+			Count0_6:    count0_6,
+			Count1_5:    count1_5,
+			Count2_4:    count2_4,
+			Count3_3:    count3_3,
+			Count4_2:    count4_2,
+			Count5_1:    count5_1,
+			Count6_0:    count6_0,
+			Prob0_6:     float64(count0_6) / float64(drawNo),
+			Prob1_5:     float64(count1_5) / float64(drawNo),
+			Prob2_4:     float64(count2_4) / float64(drawNo),
+			Prob3_3:     float64(count3_3) / float64(drawNo),
+			Prob4_2:     float64(count4_2) / float64(drawNo),
+			Prob5_1:     float64(count5_1) / float64(drawNo),
+			Prob6_0:     float64(count6_0) / float64(drawNo),
+		}
+
+		// DB에 저장
+		if err := a.repo.UpsertHighLowStats(ctx, newStat); err != nil {
+			a.log.Errorf("CalculateHighLowStatsDB: failed to upsert stats for draw %d: %v", drawNo, err)
+			return err
+		}
+
+		a.log.Infof("CalculateHighLowStatsDB: calculated draw %d (ratio: %s)", drawNo, ratio)
+	}
+
+	a.log.Infof("CalculateHighLowStatsDB: completed (draw %d to %d)", lastCalcDrawNo+1, latestDrawNo)
+	return nil
+}
+
+// CalculateFullHighLowStatsDB 고저 비율 통계 전체 재계산
+func (a *Analyzer) CalculateFullHighLowStatsDB(ctx context.Context) error {
+	a.log.Infof("CalculateFullHighLowStatsDB: starting full calculation")
+
+	// 모든 당첨번호 조회
+	draws, err := a.repo.GetAllDraws(ctx)
+	if err != nil {
+		a.log.Errorf("CalculateFullHighLowStatsDB: failed to get all draws: %v", err)
+		return err
+	}
+
+	if len(draws) == 0 {
+		a.log.Infof("CalculateFullHighLowStatsDB: no draws found")
+		return nil
+	}
+
+	// 누적 카운트 초기화
+	count0_6, count1_5, count2_4, count3_3, count4_2, count5_1, count6_0 := 0, 0, 0, 0, 0, 0, 0
+
+	// 각 회차별 계산
+	for _, draw := range draws {
+		// 고번호 개수 계산
+		nums := draw.Numbers()
+		highCount := countHighNumbers(nums)
+		ratio := highLowRatioKey(highCount)
+
+		// 해당 비율의 카운트 증가
+		switch highCount {
+		case 0:
+			count0_6++
+		case 1:
+			count1_5++
+		case 2:
+			count2_4++
+		case 3:
+			count3_3++
+		case 4:
+			count4_2++
+		case 5:
+			count5_1++
+		case 6:
+			count6_0++
+		}
+
+		// 확률 계산
+		newStat := HighLowStatDB{
+			DrawNo:      draw.DrawNo,
+			ActualRatio: ratio,
+			Count0_6:    count0_6,
+			Count1_5:    count1_5,
+			Count2_4:    count2_4,
+			Count3_3:    count3_3,
+			Count4_2:    count4_2,
+			Count5_1:    count5_1,
+			Count6_0:    count6_0,
+			Prob0_6:     float64(count0_6) / float64(draw.DrawNo),
+			Prob1_5:     float64(count1_5) / float64(draw.DrawNo),
+			Prob2_4:     float64(count2_4) / float64(draw.DrawNo),
+			Prob3_3:     float64(count3_3) / float64(draw.DrawNo),
+			Prob4_2:     float64(count4_2) / float64(draw.DrawNo),
+			Prob5_1:     float64(count5_1) / float64(draw.DrawNo),
+			Prob6_0:     float64(count6_0) / float64(draw.DrawNo),
+		}
+
+		// DB에 저장
+		if err := a.repo.UpsertHighLowStats(ctx, newStat); err != nil {
+			a.log.Errorf("CalculateFullHighLowStatsDB: failed to upsert stats for draw %d: %v", draw.DrawNo, err)
+			return err
+		}
+	}
+
+	a.log.Infof("CalculateFullHighLowStatsDB: completed successfully (%d draws)", len(draws))
+	return nil
+}
+
+// FixZeroHighLowProbability prob이 모두 0인 행을 찾아서 수정
+func (a *Analyzer) FixZeroHighLowProbability(ctx context.Context) (int, error) {
+	a.log.Infof("FixZeroHighLowProbability: starting")
+
+	// prob이 모두 0인 행 조회
+	zeroStats, err := a.repo.GetHighLowStatsWithZeroProb(ctx)
+	if err != nil {
+		a.log.Errorf("FixZeroHighLowProbability: failed to get zero prob stats: %v", err)
+		return 0, err
+	}
+
+	if len(zeroStats) == 0 {
+		a.log.Infof("FixZeroHighLowProbability: no rows with zero probability found")
+		return 0, nil
+	}
+
+	a.log.Infof("FixZeroHighLowProbability: found %d rows with zero probability", len(zeroStats))
+
+	// 확률 재계산 및 업데이트
+	for i, stat := range zeroStats {
+		if stat.DrawNo > 0 {
+			stat.Prob0_6 = float64(stat.Count0_6) / float64(stat.DrawNo)
+			stat.Prob1_5 = float64(stat.Count1_5) / float64(stat.DrawNo)
+			stat.Prob2_4 = float64(stat.Count2_4) / float64(stat.DrawNo)
+			stat.Prob3_3 = float64(stat.Count3_3) / float64(stat.DrawNo)
+			stat.Prob4_2 = float64(stat.Count4_2) / float64(stat.DrawNo)
+			stat.Prob5_1 = float64(stat.Count5_1) / float64(stat.DrawNo)
+			stat.Prob6_0 = float64(stat.Count6_0) / float64(stat.DrawNo)
+		}
+
+		if err := a.repo.UpdateHighLowStatsProb(ctx, stat); err != nil {
+			a.log.Errorf("FixZeroHighLowProbability: failed to update stats for draw %d: %v", stat.DrawNo, err)
+			return i, err
+		}
+	}
+
+	a.log.Infof("FixZeroHighLowProbability: updated %d rows successfully", len(zeroStats))
+	return len(zeroStats), nil
+}
