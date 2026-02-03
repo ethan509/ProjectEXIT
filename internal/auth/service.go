@@ -53,7 +53,7 @@ func (s *Service) GuestLogin(ctx context.Context, deviceID string) (*TokenRespon
 }
 
 // EmailRegister 이메일 회원가입
-func (s *Service) EmailRegister(ctx context.Context, email, password, code string) (*TokenResponse, error) {
+func (s *Service) EmailRegister(ctx context.Context, email, password, code string, profile *UserProfileInput) (*TokenResponse, error) {
 	// 이메일 중복 확인
 	exists, err := s.repo.EmailExists(ctx, email)
 	if err != nil {
@@ -75,7 +75,7 @@ func (s *Service) EmailRegister(ctx context.Context, email, password, code strin
 	}
 
 	// 사용자 생성
-	user, err := s.repo.CreateMemberUser(ctx, email, string(hash))
+	user, err := s.repo.CreateMemberUser(ctx, email, string(hash), profile)
 	if err != nil {
 		return nil, err
 	}
@@ -220,11 +220,28 @@ func (s *Service) GetUser(ctx context.Context, userID int64) (*UserResponse, err
 		}
 	}
 
-	return &UserResponse{
-		ID:    user.ID,
-		Email: user.Email,
-		Tier:  tierResp,
-	}, nil
+	resp := &UserResponse{
+		ID:       user.ID,
+		Email:    user.Email,
+		Tier:     tierResp,
+		Gender:   user.Gender,
+		Region:   user.Region,
+		Nickname: user.Nickname,
+	}
+
+	// birth_date 포맷팅
+	if user.BirthDate != nil {
+		bd := user.BirthDate.Format("2006-01-02")
+		resp.BirthDate = &bd
+	}
+
+	// purchase_frequency
+	if user.PurchaseFrequency != nil {
+		pf := string(*user.PurchaseFrequency)
+		resp.PurchaseFrequency = &pf
+	}
+
+	return resp, nil
 }
 
 // GetAllTiers 모든 등급 조회

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"time"
 )
 
 type Handler struct {
@@ -44,12 +45,62 @@ func (h *Handler) EmailRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 필수 필드 검증
 	if req.Email == "" || req.Password == "" || req.Code == "" {
 		h.errorResponse(w, http.StatusBadRequest, "email, password and code are required")
 		return
 	}
 
-	tokens, err := h.service.EmailRegister(r.Context(), req.Email, req.Password, req.Code)
+	// 필수 프로필 필드 검증
+	if req.Gender == "" {
+		h.errorResponse(w, http.StatusBadRequest, "gender is required")
+		return
+	}
+	if req.BirthDate == "" {
+		h.errorResponse(w, http.StatusBadRequest, "birth_date is required")
+		return
+	}
+
+	// 성별 검증
+	gender := Gender(req.Gender)
+	if gender != GenderMale && gender != GenderFemale && gender != GenderOther {
+		h.errorResponse(w, http.StatusBadRequest, "gender must be M, F, or O")
+		return
+	}
+
+	// 생년월일 파싱
+	birthDate, err := time.Parse("2006-01-02", req.BirthDate)
+	if err != nil {
+		h.errorResponse(w, http.StatusBadRequest, "birth_date must be in YYYY-MM-DD format")
+		return
+	}
+
+	// 구매빈도 검증 (옵션)
+	var purchaseFreq *PurchaseFrequency
+	if req.PurchaseFrequency != nil && *req.PurchaseFrequency != "" {
+		pf := PurchaseFrequency(*req.PurchaseFrequency)
+		if pf != FreqWeekly && pf != FreqMonthly && pf != FreqBimonthly && pf != FreqIrregular {
+			h.errorResponse(w, http.StatusBadRequest, "purchase_frequency must be WEEKLY, MONTHLY, BIMONTHLY, or IRREGULAR")
+			return
+		}
+		purchaseFreq = &pf
+	}
+
+	// 닉네임 길이 검증 (옵션)
+	if req.Nickname != nil && len(*req.Nickname) > 20 {
+		h.errorResponse(w, http.StatusBadRequest, "nickname must be 20 characters or less")
+		return
+	}
+
+	profile := &UserProfileInput{
+		Gender:            gender,
+		BirthDate:         birthDate,
+		Region:            req.Region,
+		Nickname:          req.Nickname,
+		PurchaseFrequency: purchaseFreq,
+	}
+
+	tokens, err := h.service.EmailRegister(r.Context(), req.Email, req.Password, req.Code, profile)
 	if errors.Is(err, ErrEmailAlreadyExists) {
 		h.errorResponse(w, http.StatusConflict, "email already exists")
 		return
