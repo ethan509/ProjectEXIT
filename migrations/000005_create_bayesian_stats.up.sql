@@ -1,4 +1,4 @@
--- 003_create_bayesian_stats.sql
+-- 005_create_bayesian_stats.sql
 -- 베이지안 추론 통계 테이블 (회차별, 번호별 누적 확률)
 
 CREATE TABLE IF NOT EXISTS lotto_bayesian_stats (

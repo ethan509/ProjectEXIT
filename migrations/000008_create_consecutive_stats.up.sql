@@ -1,4 +1,4 @@
--- 014_create_consecutive_stats.up.sql
+-- 008_create_consecutive_stats.sql
 -- 연번 통계 테이블 (회차별 연번 개수 확률 추이)
 
 CREATE TABLE IF NOT EXISTS lotto_consecutive_stats (

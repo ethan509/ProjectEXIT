@@ -1,4 +1,4 @@
--- 015_create_odd_even_stats.up.sql
+-- 009_create_odd_even_stats.sql
 -- 홀짝 비율 통계 테이블 (회차별 홀수:짝수 비율 확률 추이)
 
 CREATE TABLE IF NOT EXISTS lotto_odd_even_stats (
