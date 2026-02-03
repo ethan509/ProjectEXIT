@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"time"
 )
 
@@ -1093,4 +1094,280 @@ func (r *Repository) UpdateAnalysisStatsBonusProb(ctx context.Context, updates [
 	}
 
 	return tx.Commit()
+}
+
+// Pair Stats Methods
+
+// UpsertPairStats 번호 쌍 통계 일괄 저장/업데이트
+func (r *Repository) UpsertPairStats(ctx context.Context, stats []PairStatDB) error {
+	if len(stats) == 0 {
+		return nil
+	}
+
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	stmt, err := tx.PrepareContext(ctx,
+		`INSERT INTO lotto_pair_stats (draw_no, number1, number2, count, prob, calculated_at)
+		 VALUES ($1, $2, $3, $4, $5, NOW())
+		 ON CONFLICT (draw_no, number1, number2) DO UPDATE SET
+		 	count = EXCLUDED.count,
+		 	prob = EXCLUDED.prob,
+		 	calculated_at = NOW(),
+		 	updated_at = NOW()`,
+	)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	for _, stat := range stats {
+		_, err := stmt.ExecContext(ctx, stat.DrawNo, stat.Number1, stat.Number2, stat.Count, stat.Prob)
+		if err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit()
+}
+
+// GetPairStatsByDrawNo 특정 회차의 번호 쌍 통계 조회
+func (r *Repository) GetPairStatsByDrawNo(ctx context.Context, drawNo int) ([]PairStatDB, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT draw_no, number1, number2, count, prob, calculated_at
+		 FROM lotto_pair_stats
+		 WHERE draw_no = $1
+		 ORDER BY number1 ASC, number2 ASC`, drawNo,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var stats []PairStatDB
+	for rows.Next() {
+		var stat PairStatDB
+		if err := rows.Scan(&stat.DrawNo, &stat.Number1, &stat.Number2, &stat.Count, &stat.Prob, &stat.CalculatedAt); err != nil {
+			return nil, err
+		}
+		stats = append(stats, stat)
+	}
+	return stats, rows.Err()
+}
+
+// GetLatestPairStatsDrawNo 번호 쌍 통계가 계산된 가장 최근 회차 번호 조회
+func (r *Repository) GetLatestPairStatsDrawNo(ctx context.Context) (int, error) {
+	var drawNo int
+	err := r.db.QueryRowContext(ctx,
+		"SELECT COALESCE(MAX(draw_no), 0) FROM lotto_pair_stats",
+	).Scan(&drawNo)
+	if err != nil {
+		return 0, err
+	}
+	return drawNo, nil
+}
+
+// GetLatestPairStats 가장 최근 회차의 번호 쌍 통계 조회
+func (r *Repository) GetLatestPairStats(ctx context.Context) ([]PairStatDB, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT draw_no, number1, number2, count, prob, calculated_at
+		 FROM lotto_pair_stats
+		 WHERE draw_no = (SELECT COALESCE(MAX(draw_no), 0) FROM lotto_pair_stats)
+		 ORDER BY number1 ASC, number2 ASC`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var stats []PairStatDB
+	for rows.Next() {
+		var stat PairStatDB
+		if err := rows.Scan(&stat.DrawNo, &stat.Number1, &stat.Number2, &stat.Count, &stat.Prob, &stat.CalculatedAt); err != nil {
+			return nil, err
+		}
+		stats = append(stats, stat)
+	}
+	return stats, rows.Err()
+}
+
+// GetPairStatsWithZeroProb prob이 0인 행 조회 (수정 필요한 행)
+func (r *Repository) GetPairStatsWithZeroProb(ctx context.Context) ([]PairStatDB, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT draw_no, number1, number2, count, prob, calculated_at
+		 FROM lotto_pair_stats
+		 WHERE prob = 0 OR prob IS NULL
+		 ORDER BY draw_no ASC, number1 ASC, number2 ASC`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var stats []PairStatDB
+	for rows.Next() {
+		var stat PairStatDB
+		var prob sql.NullFloat64
+		if err := rows.Scan(&stat.DrawNo, &stat.Number1, &stat.Number2, &stat.Count, &prob, &stat.CalculatedAt); err != nil {
+			return nil, err
+		}
+		if prob.Valid {
+			stat.Prob = prob.Float64
+		}
+		stats = append(stats, stat)
+	}
+	return stats, rows.Err()
+}
+
+// UpdatePairStatsProb prob 일괄 업데이트
+func (r *Repository) UpdatePairStatsProb(ctx context.Context, updates []PairStatDB) error {
+	if len(updates) == 0 {
+		return nil
+	}
+
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	stmt, err := tx.PrepareContext(ctx,
+		`UPDATE lotto_pair_stats
+		 SET prob = $1, updated_at = NOW()
+		 WHERE draw_no = $2 AND number1 = $3 AND number2 = $4`,
+	)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	for _, stat := range updates {
+		_, err := stmt.ExecContext(ctx, stat.Prob, stat.DrawNo, stat.Number1, stat.Number2)
+		if err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit()
+}
+
+// GetTopPairsByDrawNo 특정 회차에서 확률 높은 쌍 N개 조회
+func (r *Repository) GetTopPairsByDrawNo(ctx context.Context, drawNo int, topN int) ([]PairStatDB, error) {
+	if topN <= 0 {
+		topN = 20
+	}
+
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT draw_no, number1, number2, count, prob, calculated_at
+		 FROM lotto_pair_stats
+		 WHERE draw_no = $1
+		 ORDER BY prob DESC, count DESC
+		 LIMIT $2`, drawNo, topN,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var stats []PairStatDB
+	for rows.Next() {
+		var stat PairStatDB
+		if err := rows.Scan(&stat.DrawNo, &stat.Number1, &stat.Number2, &stat.Count, &stat.Prob, &stat.CalculatedAt); err != nil {
+			return nil, err
+		}
+		stats = append(stats, stat)
+	}
+	return stats, rows.Err()
+}
+
+// GetPairStatsByNumbers 특정 번호 쌍의 히스토리 조회
+func (r *Repository) GetPairStatsByNumbers(ctx context.Context, number1, number2, limit int) ([]PairStatDB, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+
+	// number1 < number2 보장
+	if number1 > number2 {
+		number1, number2 = number2, number1
+	}
+
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT draw_no, number1, number2, count, prob, calculated_at
+		 FROM lotto_pair_stats
+		 WHERE number1 = $1 AND number2 = $2
+		 ORDER BY draw_no DESC
+		 LIMIT $3`, number1, number2, limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var stats []PairStatDB
+	for rows.Next() {
+		var stat PairStatDB
+		if err := rows.Scan(&stat.DrawNo, &stat.Number1, &stat.Number2, &stat.Count, &stat.Prob, &stat.CalculatedAt); err != nil {
+			return nil, err
+		}
+		stats = append(stats, stat)
+	}
+	return stats, rows.Err()
+}
+
+// GetPairProbsForNumbers 선택된 번호들 간의 pair 확률 일괄 조회
+// 예: [1, 5, 12] 선택 시 → (1,5), (1,12), (5,12) 확률 반환
+func (r *Repository) GetPairProbsForNumbers(ctx context.Context, drawNo int, numbers []int) ([]PairStatDB, error) {
+	if len(numbers) < 2 {
+		return nil, nil
+	}
+
+	// 모든 가능한 쌍 생성 (nC2)
+	var pairs [][]int
+	for i := 0; i < len(numbers); i++ {
+		for j := i + 1; j < len(numbers); j++ {
+			n1, n2 := numbers[i], numbers[j]
+			if n1 > n2 {
+				n1, n2 = n2, n1
+			}
+			pairs = append(pairs, []int{n1, n2})
+		}
+	}
+
+	if len(pairs) == 0 {
+		return nil, nil
+	}
+
+	// 쿼리 빌드 (OR 조건으로 모든 쌍 조회)
+	query := `SELECT draw_no, number1, number2, count, prob, calculated_at
+		 FROM lotto_pair_stats
+		 WHERE draw_no = $1 AND (`
+
+	args := []interface{}{drawNo}
+	for i, pair := range pairs {
+		if i > 0 {
+			query += " OR "
+		}
+		query += fmt.Sprintf("(number1 = $%d AND number2 = $%d)", i*2+2, i*2+3)
+		args = append(args, pair[0], pair[1])
+	}
+	query += ")"
+
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var stats []PairStatDB
+	for rows.Next() {
+		var stat PairStatDB
+		if err := rows.Scan(&stat.DrawNo, &stat.Number1, &stat.Number2, &stat.Count, &stat.Prob, &stat.CalculatedAt); err != nil {
+			return nil, err
+		}
+		stats = append(stats, stat)
+	}
+	return stats, rows.Err()
 }

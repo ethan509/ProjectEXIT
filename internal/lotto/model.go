@@ -75,12 +75,23 @@ type FirstLastStatsResponse struct {
 	LatestDrawNo int            `json:"latest_draw_no"`
 }
 
-// PairStat 번호 쌍 동반 출현 통계
+// PairStat 번호 쌍 동반 출현 통계 (API 응답용)
 type PairStat struct {
 	Number1     int     `json:"number1"`
 	Number2     int     `json:"number2"`
 	Count       int     `json:"count"`
 	Probability float64 `json:"probability"`
+}
+
+// PairStatDB 번호 쌍 동시출현 통계 (DB 저장용)
+// 회차별로 모든 번호 쌍(45C2=990개)의 누적 통계를 저장
+type PairStatDB struct {
+	DrawNo       int       `json:"draw_no"`       // 회차 번호
+	Number1      int       `json:"number1"`       // 작은 번호 (1~44)
+	Number2      int       `json:"number2"`       // 큰 번호 (2~45), number1 < number2
+	Count        int       `json:"count"`         // 누적 동시출현 횟수
+	Prob         float64   `json:"prob"`          // 동시출현 확률 (count / draw_no)
+	CalculatedAt time.Time `json:"calculated_at"`
 }
 
 // PairStatsResponse 동반 출현 통계 응답

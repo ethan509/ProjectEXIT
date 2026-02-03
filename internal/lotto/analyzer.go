@@ -1564,3 +1564,236 @@ func (a *Analyzer) FixZeroBonusProbabilityStats(ctx context.Context) (int, error
 	a.log.Infof("FixZeroBonusProbabilityStats: updated %d rows successfully", len(updates))
 	return len(updates), nil
 }
+
+// CalculatePairStatsDB 번호 쌍 통계 증분 계산 (새 회차만)
+// 이전 회차의 통계를 기반으로 새 회차 통계를 계산하여 저장
+func (a *Analyzer) CalculatePairStatsDB(ctx context.Context) error {
+	a.log.Infof("CalculatePairStatsDB: starting incremental calculation")
+
+	// 가장 최근 계산된 회차 조회
+	lastCalcDrawNo, err := a.repo.GetLatestPairStatsDrawNo(ctx)
+	if err != nil {
+		a.log.Errorf("CalculatePairStatsDB: failed to get latest draw no: %v", err)
+		return err
+	}
+
+	// 전체 계산이 필요한 경우 (테이블이 비어있는 경우)
+	if lastCalcDrawNo == 0 {
+		a.log.Infof("CalculatePairStatsDB: no existing data, running full calculation")
+		return a.CalculateFullPairStatsDB(ctx)
+	}
+
+	// 가장 최신 당첨번호 회차 조회
+	latestDrawNo, err := a.repo.GetLatestDrawNo(ctx)
+	if err != nil {
+		a.log.Errorf("CalculatePairStatsDB: failed to get latest draw no: %v", err)
+		return err
+	}
+
+	if lastCalcDrawNo >= latestDrawNo {
+		a.log.Infof("CalculatePairStatsDB: already up to date (draw %d)", lastCalcDrawNo)
+		return nil
+	}
+
+	// 이전 회차의 통계 조회
+	prevStats, err := a.repo.GetPairStatsByDrawNo(ctx, lastCalcDrawNo)
+	if err != nil {
+		a.log.Errorf("CalculatePairStatsDB: failed to get previous stats: %v", err)
+		return err
+	}
+
+	// 이전 통계를 맵으로 변환
+	prevStatsMap := make(map[string]PairStatDB)
+	for _, stat := range prevStats {
+		key := pairKey(stat.Number1, stat.Number2)
+		prevStatsMap[key] = stat
+	}
+
+	// 새 회차들 계산
+	for drawNo := lastCalcDrawNo + 1; drawNo <= latestDrawNo; drawNo++ {
+		draw, err := a.repo.GetDrawByNo(ctx, drawNo)
+		if err != nil {
+			a.log.Warnf("CalculatePairStatsDB: skipping draw %d: %v", drawNo, err)
+			continue
+		}
+
+		// 해당 회차의 당첨 번호에서 쌍 추출
+		numbers := draw.Numbers()
+		drawPairs := extractPairs(numbers)
+		drawPairsSet := make(map[string]bool)
+		for _, pair := range drawPairs {
+			drawPairsSet[pairKey(pair[0], pair[1])] = true
+		}
+
+		// 모든 가능한 쌍(990개)에 대해 통계 계산
+		newStats := make([]PairStatDB, 0, 990)
+		for n1 := 1; n1 <= 44; n1++ {
+			for n2 := n1 + 1; n2 <= 45; n2++ {
+				key := pairKey(n1, n2)
+				prev := prevStatsMap[key]
+
+				newCount := prev.Count
+				if drawPairsSet[key] {
+					newCount++
+				}
+
+				var prob float64
+				if drawNo > 0 {
+					prob = float64(newCount) / float64(drawNo)
+				}
+
+				newStat := PairStatDB{
+					DrawNo:  drawNo,
+					Number1: n1,
+					Number2: n2,
+					Count:   newCount,
+					Prob:    prob,
+				}
+				newStats = append(newStats, newStat)
+
+				// 다음 회차를 위해 맵 업데이트
+				prevStatsMap[key] = newStat
+			}
+		}
+
+		// DB에 저장
+		if err := a.repo.UpsertPairStats(ctx, newStats); err != nil {
+			a.log.Errorf("CalculatePairStatsDB: failed to upsert stats for draw %d: %v", drawNo, err)
+			return err
+		}
+
+		a.log.Infof("CalculatePairStatsDB: calculated draw %d", drawNo)
+	}
+
+	a.log.Infof("CalculatePairStatsDB: completed (draw %d to %d)", lastCalcDrawNo+1, latestDrawNo)
+	return nil
+}
+
+// CalculateFullPairStatsDB 번호 쌍 통계 전체 재계산
+// 1회차부터 모든 회차를 순차적으로 계산하여 저장
+func (a *Analyzer) CalculateFullPairStatsDB(ctx context.Context) error {
+	a.log.Infof("CalculateFullPairStatsDB: starting full calculation")
+
+	// 모든 당첨번호 조회
+	draws, err := a.repo.GetAllDraws(ctx)
+	if err != nil {
+		a.log.Errorf("CalculateFullPairStatsDB: failed to get all draws: %v", err)
+		return err
+	}
+
+	if len(draws) == 0 {
+		a.log.Infof("CalculateFullPairStatsDB: no draws found")
+		return nil
+	}
+
+	// 누적 카운트 초기화 (990개 쌍)
+	countMap := make(map[string]int)
+	for n1 := 1; n1 <= 44; n1++ {
+		for n2 := n1 + 1; n2 <= 45; n2++ {
+			countMap[pairKey(n1, n2)] = 0
+		}
+	}
+
+	// 각 회차별 계산
+	for _, draw := range draws {
+		// 해당 회차의 당첨 번호에서 쌍 추출
+		numbers := draw.Numbers()
+		drawPairs := extractPairs(numbers)
+
+		// 카운트 업데이트
+		for _, pair := range drawPairs {
+			countMap[pairKey(pair[0], pair[1])]++
+		}
+
+		// 모든 쌍의 통계 생성
+		newStats := make([]PairStatDB, 0, 990)
+		for n1 := 1; n1 <= 44; n1++ {
+			for n2 := n1 + 1; n2 <= 45; n2++ {
+				key := pairKey(n1, n2)
+				count := countMap[key]
+
+				var prob float64
+				if draw.DrawNo > 0 {
+					prob = float64(count) / float64(draw.DrawNo)
+				}
+
+				newStats = append(newStats, PairStatDB{
+					DrawNo:  draw.DrawNo,
+					Number1: n1,
+					Number2: n2,
+					Count:   count,
+					Prob:    prob,
+				})
+			}
+		}
+
+		// DB에 저장
+		if err := a.repo.UpsertPairStats(ctx, newStats); err != nil {
+			a.log.Errorf("CalculateFullPairStatsDB: failed to upsert stats for draw %d: %v", draw.DrawNo, err)
+			return err
+		}
+	}
+
+	a.log.Infof("CalculateFullPairStatsDB: completed successfully (%d draws)", len(draws))
+	return nil
+}
+
+// FixZeroPairProbability prob이 0인 행을 찾아서 수정
+func (a *Analyzer) FixZeroPairProbability(ctx context.Context) (int, error) {
+	a.log.Infof("FixZeroPairProbability: starting")
+
+	// prob이 0인 행 조회
+	zeroStats, err := a.repo.GetPairStatsWithZeroProb(ctx)
+	if err != nil {
+		a.log.Errorf("FixZeroPairProbability: failed to get zero prob stats: %v", err)
+		return 0, err
+	}
+
+	if len(zeroStats) == 0 {
+		a.log.Infof("FixZeroPairProbability: no rows with zero probability found")
+		return 0, nil
+	}
+
+	a.log.Infof("FixZeroPairProbability: found %d rows with zero probability", len(zeroStats))
+
+	// 확률 재계산
+	updates := make([]PairStatDB, 0, len(zeroStats))
+	for _, stat := range zeroStats {
+		if stat.DrawNo > 0 {
+			stat.Prob = float64(stat.Count) / float64(stat.DrawNo)
+		}
+		updates = append(updates, stat)
+	}
+
+	// DB 업데이트
+	if err := a.repo.UpdatePairStatsProb(ctx, updates); err != nil {
+		a.log.Errorf("FixZeroPairProbability: failed to update stats: %v", err)
+		return 0, err
+	}
+
+	a.log.Infof("FixZeroPairProbability: updated %d rows successfully", len(updates))
+	return len(updates), nil
+}
+
+// pairKey 번호 쌍의 고유 키 생성 (number1 < number2 보장)
+func pairKey(n1, n2 int) string {
+	if n1 > n2 {
+		n1, n2 = n2, n1
+	}
+	return fmt.Sprintf("%d-%d", n1, n2)
+}
+
+// extractPairs 6개 번호에서 모든 쌍(15개) 추출
+func extractPairs(numbers []int) [][]int {
+	var pairs [][]int
+	for i := 0; i < len(numbers); i++ {
+		for j := i + 1; j < len(numbers); j++ {
+			n1, n2 := numbers[i], numbers[j]
+			if n1 > n2 {
+				n1, n2 = n2, n1
+			}
+			pairs = append(pairs, []int{n1, n2})
+		}
+	}
+	return pairs
+}
