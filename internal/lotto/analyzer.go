@@ -1797,3 +1797,218 @@ func extractPairs(numbers []int) [][]int {
 	}
 	return pairs
 }
+
+// CalculateConsecutiveStatsDB 연번 통계 증분 계산 (새 회차만)
+func (a *Analyzer) CalculateConsecutiveStatsDB(ctx context.Context) error {
+	a.log.Infof("CalculateConsecutiveStatsDB: starting incremental calculation")
+
+	// 가장 최근 계산된 회차 조회
+	lastCalcDrawNo, err := a.repo.GetLatestConsecutiveStatsDrawNo(ctx)
+	if err != nil {
+		a.log.Errorf("CalculateConsecutiveStatsDB: failed to get latest draw no: %v", err)
+		return err
+	}
+
+	// 전체 계산이 필요한 경우 (테이블이 비어있는 경우)
+	if lastCalcDrawNo == 0 {
+		a.log.Infof("CalculateConsecutiveStatsDB: no existing data, running full calculation")
+		return a.CalculateFullConsecutiveStatsDB(ctx)
+	}
+
+	// 가장 최신 당첨번호 회차 조회
+	latestDrawNo, err := a.repo.GetLatestDrawNo(ctx)
+	if err != nil {
+		a.log.Errorf("CalculateConsecutiveStatsDB: failed to get latest draw no: %v", err)
+		return err
+	}
+
+	if lastCalcDrawNo >= latestDrawNo {
+		a.log.Infof("CalculateConsecutiveStatsDB: already up to date (draw %d)", lastCalcDrawNo)
+		return nil
+	}
+
+	// 이전 회차의 통계 조회
+	prevStat, err := a.repo.GetConsecutiveStatsByDrawNo(ctx, lastCalcDrawNo)
+	if err != nil {
+		a.log.Errorf("CalculateConsecutiveStatsDB: failed to get previous stats: %v", err)
+		return err
+	}
+
+	// 누적 카운트 초기화
+	count0, count2, count3, count4, count5, count6 := 0, 0, 0, 0, 0, 0
+	if prevStat != nil {
+		count0 = prevStat.Count0
+		count2 = prevStat.Count2
+		count3 = prevStat.Count3
+		count4 = prevStat.Count4
+		count5 = prevStat.Count5
+		count6 = prevStat.Count6
+	}
+
+	// 새 회차들 계산
+	for drawNo := lastCalcDrawNo + 1; drawNo <= latestDrawNo; drawNo++ {
+		draw, err := a.repo.GetDrawByNo(ctx, drawNo)
+		if err != nil {
+			a.log.Warnf("CalculateConsecutiveStatsDB: skipping draw %d: %v", drawNo, err)
+			continue
+		}
+
+		// 연번 개수 계산
+		nums := draw.Numbers()
+		consecutiveCount := countConsecutive(nums)
+
+		// 해당 연번 개수의 카운트 증가
+		switch consecutiveCount {
+		case 0:
+			count0++
+		case 2:
+			count2++
+		case 3:
+			count3++
+		case 4:
+			count4++
+		case 5:
+			count5++
+		case 6:
+			count6++
+		}
+
+		// 확률 계산
+		newStat := ConsecutiveStatDB{
+			DrawNo:      drawNo,
+			ActualCount: consecutiveCount,
+			Count0:      count0,
+			Count2:      count2,
+			Count3:      count3,
+			Count4:      count4,
+			Count5:      count5,
+			Count6:      count6,
+			Prob0:       float64(count0) / float64(drawNo),
+			Prob2:       float64(count2) / float64(drawNo),
+			Prob3:       float64(count3) / float64(drawNo),
+			Prob4:       float64(count4) / float64(drawNo),
+			Prob5:       float64(count5) / float64(drawNo),
+			Prob6:       float64(count6) / float64(drawNo),
+		}
+
+		// DB에 저장
+		if err := a.repo.UpsertConsecutiveStats(ctx, newStat); err != nil {
+			a.log.Errorf("CalculateConsecutiveStatsDB: failed to upsert stats for draw %d: %v", drawNo, err)
+			return err
+		}
+
+		a.log.Infof("CalculateConsecutiveStatsDB: calculated draw %d (consecutive: %d)", drawNo, consecutiveCount)
+	}
+
+	a.log.Infof("CalculateConsecutiveStatsDB: completed (draw %d to %d)", lastCalcDrawNo+1, latestDrawNo)
+	return nil
+}
+
+// CalculateFullConsecutiveStatsDB 연번 통계 전체 재계산
+func (a *Analyzer) CalculateFullConsecutiveStatsDB(ctx context.Context) error {
+	a.log.Infof("CalculateFullConsecutiveStatsDB: starting full calculation")
+
+	// 모든 당첨번호 조회
+	draws, err := a.repo.GetAllDraws(ctx)
+	if err != nil {
+		a.log.Errorf("CalculateFullConsecutiveStatsDB: failed to get all draws: %v", err)
+		return err
+	}
+
+	if len(draws) == 0 {
+		a.log.Infof("CalculateFullConsecutiveStatsDB: no draws found")
+		return nil
+	}
+
+	// 누적 카운트 초기화
+	count0, count2, count3, count4, count5, count6 := 0, 0, 0, 0, 0, 0
+
+	// 각 회차별 계산
+	for _, draw := range draws {
+		// 연번 개수 계산
+		nums := draw.Numbers()
+		consecutiveCount := countConsecutive(nums)
+
+		// 해당 연번 개수의 카운트 증가
+		switch consecutiveCount {
+		case 0:
+			count0++
+		case 2:
+			count2++
+		case 3:
+			count3++
+		case 4:
+			count4++
+		case 5:
+			count5++
+		case 6:
+			count6++
+		}
+
+		// 확률 계산
+		newStat := ConsecutiveStatDB{
+			DrawNo:      draw.DrawNo,
+			ActualCount: consecutiveCount,
+			Count0:      count0,
+			Count2:      count2,
+			Count3:      count3,
+			Count4:      count4,
+			Count5:      count5,
+			Count6:      count6,
+			Prob0:       float64(count0) / float64(draw.DrawNo),
+			Prob2:       float64(count2) / float64(draw.DrawNo),
+			Prob3:       float64(count3) / float64(draw.DrawNo),
+			Prob4:       float64(count4) / float64(draw.DrawNo),
+			Prob5:       float64(count5) / float64(draw.DrawNo),
+			Prob6:       float64(count6) / float64(draw.DrawNo),
+		}
+
+		// DB에 저장
+		if err := a.repo.UpsertConsecutiveStats(ctx, newStat); err != nil {
+			a.log.Errorf("CalculateFullConsecutiveStatsDB: failed to upsert stats for draw %d: %v", draw.DrawNo, err)
+			return err
+		}
+	}
+
+	a.log.Infof("CalculateFullConsecutiveStatsDB: completed successfully (%d draws)", len(draws))
+	return nil
+}
+
+// FixZeroConsecutiveProbability prob이 모두 0인 행을 찾아서 수정
+func (a *Analyzer) FixZeroConsecutiveProbability(ctx context.Context) (int, error) {
+	a.log.Infof("FixZeroConsecutiveProbability: starting")
+
+	// prob이 모두 0인 행 조회
+	zeroStats, err := a.repo.GetConsecutiveStatsWithZeroProb(ctx)
+	if err != nil {
+		a.log.Errorf("FixZeroConsecutiveProbability: failed to get zero prob stats: %v", err)
+		return 0, err
+	}
+
+	if len(zeroStats) == 0 {
+		a.log.Infof("FixZeroConsecutiveProbability: no rows with zero probability found")
+		return 0, nil
+	}
+
+	a.log.Infof("FixZeroConsecutiveProbability: found %d rows with zero probability", len(zeroStats))
+
+	// 확률 재계산 및 업데이트
+	for i, stat := range zeroStats {
+		if stat.DrawNo > 0 {
+			stat.Prob0 = float64(stat.Count0) / float64(stat.DrawNo)
+			stat.Prob2 = float64(stat.Count2) / float64(stat.DrawNo)
+			stat.Prob3 = float64(stat.Count3) / float64(stat.DrawNo)
+			stat.Prob4 = float64(stat.Count4) / float64(stat.DrawNo)
+			stat.Prob5 = float64(stat.Count5) / float64(stat.DrawNo)
+			stat.Prob6 = float64(stat.Count6) / float64(stat.DrawNo)
+		}
+
+		if err := a.repo.UpdateConsecutiveStatsProb(ctx, stat); err != nil {
+			a.log.Errorf("FixZeroConsecutiveProbability: failed to update stats for draw %d: %v", stat.DrawNo, err)
+			return i, err
+		}
+	}
+
+	a.log.Infof("FixZeroConsecutiveProbability: updated %d rows successfully", len(zeroStats))
+	return len(zeroStats), nil
+}

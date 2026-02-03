@@ -1371,3 +1371,174 @@ func (r *Repository) GetPairProbsForNumbers(ctx context.Context, drawNo int, num
 	}
 	return stats, rows.Err()
 }
+
+// Consecutive Stats Methods
+
+// UpsertConsecutiveStats 연번 통계 저장/업데이트
+func (r *Repository) UpsertConsecutiveStats(ctx context.Context, stat ConsecutiveStatDB) error {
+	_, err := r.db.ExecContext(ctx,
+		`INSERT INTO lotto_consecutive_stats (
+			draw_no, actual_count,
+			count_0, count_2, count_3, count_4, count_5, count_6,
+			prob_0, prob_2, prob_3, prob_4, prob_5, prob_6,
+			calculated_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW())
+		ON CONFLICT (draw_no) DO UPDATE SET
+			actual_count = EXCLUDED.actual_count,
+			count_0 = EXCLUDED.count_0, count_2 = EXCLUDED.count_2,
+			count_3 = EXCLUDED.count_3, count_4 = EXCLUDED.count_4,
+			count_5 = EXCLUDED.count_5, count_6 = EXCLUDED.count_6,
+			prob_0 = EXCLUDED.prob_0, prob_2 = EXCLUDED.prob_2,
+			prob_3 = EXCLUDED.prob_3, prob_4 = EXCLUDED.prob_4,
+			prob_5 = EXCLUDED.prob_5, prob_6 = EXCLUDED.prob_6,
+			calculated_at = NOW(),
+			updated_at = NOW()`,
+		stat.DrawNo, stat.ActualCount,
+		stat.Count0, stat.Count2, stat.Count3, stat.Count4, stat.Count5, stat.Count6,
+		stat.Prob0, stat.Prob2, stat.Prob3, stat.Prob4, stat.Prob5, stat.Prob6,
+	)
+	return err
+}
+
+// GetConsecutiveStatsByDrawNo 특정 회차의 연번 통계 조회
+func (r *Repository) GetConsecutiveStatsByDrawNo(ctx context.Context, drawNo int) (*ConsecutiveStatDB, error) {
+	var stat ConsecutiveStatDB
+	err := r.db.QueryRowContext(ctx,
+		`SELECT draw_no, actual_count,
+		        count_0, count_2, count_3, count_4, count_5, count_6,
+		        prob_0, prob_2, prob_3, prob_4, prob_5, prob_6,
+		        calculated_at
+		 FROM lotto_consecutive_stats
+		 WHERE draw_no = $1`, drawNo,
+	).Scan(
+		&stat.DrawNo, &stat.ActualCount,
+		&stat.Count0, &stat.Count2, &stat.Count3, &stat.Count4, &stat.Count5, &stat.Count6,
+		&stat.Prob0, &stat.Prob2, &stat.Prob3, &stat.Prob4, &stat.Prob5, &stat.Prob6,
+		&stat.CalculatedAt,
+	)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &stat, nil
+}
+
+// GetLatestConsecutiveStatsDrawNo 연번 통계가 계산된 가장 최근 회차 번호 조회
+func (r *Repository) GetLatestConsecutiveStatsDrawNo(ctx context.Context) (int, error) {
+	var drawNo int
+	err := r.db.QueryRowContext(ctx,
+		"SELECT COALESCE(MAX(draw_no), 0) FROM lotto_consecutive_stats",
+	).Scan(&drawNo)
+	if err != nil {
+		return 0, err
+	}
+	return drawNo, nil
+}
+
+// GetLatestConsecutiveStats 가장 최근 회차의 연번 통계 조회
+func (r *Repository) GetLatestConsecutiveStats(ctx context.Context) (*ConsecutiveStatDB, error) {
+	var stat ConsecutiveStatDB
+	err := r.db.QueryRowContext(ctx,
+		`SELECT draw_no, actual_count,
+		        count_0, count_2, count_3, count_4, count_5, count_6,
+		        prob_0, prob_2, prob_3, prob_4, prob_5, prob_6,
+		        calculated_at
+		 FROM lotto_consecutive_stats
+		 WHERE draw_no = (SELECT COALESCE(MAX(draw_no), 0) FROM lotto_consecutive_stats)`,
+	).Scan(
+		&stat.DrawNo, &stat.ActualCount,
+		&stat.Count0, &stat.Count2, &stat.Count3, &stat.Count4, &stat.Count5, &stat.Count6,
+		&stat.Prob0, &stat.Prob2, &stat.Prob3, &stat.Prob4, &stat.Prob5, &stat.Prob6,
+		&stat.CalculatedAt,
+	)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &stat, nil
+}
+
+// GetConsecutiveStatsHistory 연번 통계 히스토리 조회
+func (r *Repository) GetConsecutiveStatsHistory(ctx context.Context, limit int) ([]ConsecutiveStatDB, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT draw_no, actual_count,
+		        count_0, count_2, count_3, count_4, count_5, count_6,
+		        prob_0, prob_2, prob_3, prob_4, prob_5, prob_6,
+		        calculated_at
+		 FROM lotto_consecutive_stats
+		 ORDER BY draw_no DESC
+		 LIMIT $1`, limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var stats []ConsecutiveStatDB
+	for rows.Next() {
+		var stat ConsecutiveStatDB
+		if err := rows.Scan(
+			&stat.DrawNo, &stat.ActualCount,
+			&stat.Count0, &stat.Count2, &stat.Count3, &stat.Count4, &stat.Count5, &stat.Count6,
+			&stat.Prob0, &stat.Prob2, &stat.Prob3, &stat.Prob4, &stat.Prob5, &stat.Prob6,
+			&stat.CalculatedAt,
+		); err != nil {
+			return nil, err
+		}
+		stats = append(stats, stat)
+	}
+	return stats, rows.Err()
+}
+
+// GetConsecutiveStatsWithZeroProb prob이 모두 0인 행 조회 (수정 필요한 행)
+func (r *Repository) GetConsecutiveStatsWithZeroProb(ctx context.Context) ([]ConsecutiveStatDB, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT draw_no, actual_count,
+		        count_0, count_2, count_3, count_4, count_5, count_6,
+		        prob_0, prob_2, prob_3, prob_4, prob_5, prob_6,
+		        calculated_at
+		 FROM lotto_consecutive_stats
+		 WHERE prob_0 = 0 AND prob_2 = 0 AND prob_3 = 0 AND prob_4 = 0 AND prob_5 = 0 AND prob_6 = 0
+		 ORDER BY draw_no ASC`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var stats []ConsecutiveStatDB
+	for rows.Next() {
+		var stat ConsecutiveStatDB
+		if err := rows.Scan(
+			&stat.DrawNo, &stat.ActualCount,
+			&stat.Count0, &stat.Count2, &stat.Count3, &stat.Count4, &stat.Count5, &stat.Count6,
+			&stat.Prob0, &stat.Prob2, &stat.Prob3, &stat.Prob4, &stat.Prob5, &stat.Prob6,
+			&stat.CalculatedAt,
+		); err != nil {
+			return nil, err
+		}
+		stats = append(stats, stat)
+	}
+	return stats, rows.Err()
+}
+
+// UpdateConsecutiveStatsProb 연번 통계 prob 업데이트
+func (r *Repository) UpdateConsecutiveStatsProb(ctx context.Context, stat ConsecutiveStatDB) error {
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE lotto_consecutive_stats
+		 SET prob_0 = $1, prob_2 = $2, prob_3 = $3, prob_4 = $4, prob_5 = $5, prob_6 = $6,
+		     updated_at = NOW()
+		 WHERE draw_no = $7`,
+		stat.Prob0, stat.Prob2, stat.Prob3, stat.Prob4, stat.Prob5, stat.Prob6,
+		stat.DrawNo,
+	)
+	return err
+}
