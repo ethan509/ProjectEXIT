@@ -124,6 +124,26 @@ type ConsecutiveStatsResponse struct {
 	LatestDrawNo   int                    `json:"latest_draw_no"`
 }
 
+// ConsecutiveStatDB 연번 통계 (DB 저장용)
+// 회차별 연번 개수 확률 추이를 저장
+type ConsecutiveStatDB struct {
+	DrawNo       int       `json:"draw_no"`       // 회차 번호
+	ActualCount  int       `json:"actual_count"`  // 해당 회차의 실제 연번 개수
+	Count0       int       `json:"count_0"`       // 연번 0개 누적 횟수
+	Count2       int       `json:"count_2"`       // 연번 2개 누적 횟수
+	Count3       int       `json:"count_3"`       // 연번 3개 누적 횟수
+	Count4       int       `json:"count_4"`       // 연번 4개 누적 횟수
+	Count5       int       `json:"count_5"`       // 연번 5개 누적 횟수
+	Count6       int       `json:"count_6"`       // 연번 6개 누적 횟수
+	Prob0        float64   `json:"prob_0"`        // 연번 0개 확률
+	Prob2        float64   `json:"prob_2"`        // 연번 2개 확률
+	Prob3        float64   `json:"prob_3"`        // 연번 3개 확률
+	Prob4        float64   `json:"prob_4"`        // 연번 4개 확률
+	Prob5        float64   `json:"prob_5"`        // 연번 5개 확률
+	Prob6        float64   `json:"prob_6"`        // 연번 6개 확률
+	CalculatedAt time.Time `json:"calculated_at"`
+}
+
 // RatioStat 비율별 통계 (홀짝, 고저)
 type RatioStat struct {
 	Ratio       string  `json:"ratio"`       // 비율 표현 (예: "3:3", "4:2")
