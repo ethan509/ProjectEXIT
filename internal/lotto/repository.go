@@ -1542,3 +1542,176 @@ func (r *Repository) UpdateConsecutiveStatsProb(ctx context.Context, stat Consec
 	)
 	return err
 }
+
+// Odd/Even Stats Methods
+
+// UpsertOddEvenStats 홀짝 비율 통계 저장/업데이트
+func (r *Repository) UpsertOddEvenStats(ctx context.Context, stat OddEvenStatDB) error {
+	_, err := r.db.ExecContext(ctx,
+		`INSERT INTO lotto_odd_even_stats (
+			draw_no, actual_ratio,
+			count_0_6, count_1_5, count_2_4, count_3_3, count_4_2, count_5_1, count_6_0,
+			prob_0_6, prob_1_5, prob_2_4, prob_3_3, prob_4_2, prob_5_1, prob_6_0,
+			calculated_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, NOW())
+		ON CONFLICT (draw_no) DO UPDATE SET
+			actual_ratio = EXCLUDED.actual_ratio,
+			count_0_6 = EXCLUDED.count_0_6, count_1_5 = EXCLUDED.count_1_5,
+			count_2_4 = EXCLUDED.count_2_4, count_3_3 = EXCLUDED.count_3_3,
+			count_4_2 = EXCLUDED.count_4_2, count_5_1 = EXCLUDED.count_5_1,
+			count_6_0 = EXCLUDED.count_6_0,
+			prob_0_6 = EXCLUDED.prob_0_6, prob_1_5 = EXCLUDED.prob_1_5,
+			prob_2_4 = EXCLUDED.prob_2_4, prob_3_3 = EXCLUDED.prob_3_3,
+			prob_4_2 = EXCLUDED.prob_4_2, prob_5_1 = EXCLUDED.prob_5_1,
+			prob_6_0 = EXCLUDED.prob_6_0,
+			calculated_at = NOW(),
+			updated_at = NOW()`,
+		stat.DrawNo, stat.ActualRatio,
+		stat.Count0_6, stat.Count1_5, stat.Count2_4, stat.Count3_3, stat.Count4_2, stat.Count5_1, stat.Count6_0,
+		stat.Prob0_6, stat.Prob1_5, stat.Prob2_4, stat.Prob3_3, stat.Prob4_2, stat.Prob5_1, stat.Prob6_0,
+	)
+	return err
+}
+
+// GetOddEvenStatsByDrawNo 특정 회차의 홀짝 비율 통계 조회
+func (r *Repository) GetOddEvenStatsByDrawNo(ctx context.Context, drawNo int) (*OddEvenStatDB, error) {
+	var stat OddEvenStatDB
+	err := r.db.QueryRowContext(ctx,
+		`SELECT draw_no, actual_ratio,
+		        count_0_6, count_1_5, count_2_4, count_3_3, count_4_2, count_5_1, count_6_0,
+		        prob_0_6, prob_1_5, prob_2_4, prob_3_3, prob_4_2, prob_5_1, prob_6_0,
+		        calculated_at
+		 FROM lotto_odd_even_stats
+		 WHERE draw_no = $1`, drawNo,
+	).Scan(
+		&stat.DrawNo, &stat.ActualRatio,
+		&stat.Count0_6, &stat.Count1_5, &stat.Count2_4, &stat.Count3_3, &stat.Count4_2, &stat.Count5_1, &stat.Count6_0,
+		&stat.Prob0_6, &stat.Prob1_5, &stat.Prob2_4, &stat.Prob3_3, &stat.Prob4_2, &stat.Prob5_1, &stat.Prob6_0,
+		&stat.CalculatedAt,
+	)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &stat, nil
+}
+
+// GetLatestOddEvenStatsDrawNo 홀짝 비율 통계가 계산된 가장 최근 회차 번호 조회
+func (r *Repository) GetLatestOddEvenStatsDrawNo(ctx context.Context) (int, error) {
+	var drawNo int
+	err := r.db.QueryRowContext(ctx,
+		"SELECT COALESCE(MAX(draw_no), 0) FROM lotto_odd_even_stats",
+	).Scan(&drawNo)
+	if err != nil {
+		return 0, err
+	}
+	return drawNo, nil
+}
+
+// GetLatestOddEvenStats 가장 최근 회차의 홀짝 비율 통계 조회
+func (r *Repository) GetLatestOddEvenStats(ctx context.Context) (*OddEvenStatDB, error) {
+	var stat OddEvenStatDB
+	err := r.db.QueryRowContext(ctx,
+		`SELECT draw_no, actual_ratio,
+		        count_0_6, count_1_5, count_2_4, count_3_3, count_4_2, count_5_1, count_6_0,
+		        prob_0_6, prob_1_5, prob_2_4, prob_3_3, prob_4_2, prob_5_1, prob_6_0,
+		        calculated_at
+		 FROM lotto_odd_even_stats
+		 WHERE draw_no = (SELECT COALESCE(MAX(draw_no), 0) FROM lotto_odd_even_stats)`,
+	).Scan(
+		&stat.DrawNo, &stat.ActualRatio,
+		&stat.Count0_6, &stat.Count1_5, &stat.Count2_4, &stat.Count3_3, &stat.Count4_2, &stat.Count5_1, &stat.Count6_0,
+		&stat.Prob0_6, &stat.Prob1_5, &stat.Prob2_4, &stat.Prob3_3, &stat.Prob4_2, &stat.Prob5_1, &stat.Prob6_0,
+		&stat.CalculatedAt,
+	)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &stat, nil
+}
+
+// GetOddEvenStatsHistory 홀짝 비율 통계 히스토리 조회
+func (r *Repository) GetOddEvenStatsHistory(ctx context.Context, limit int) ([]OddEvenStatDB, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT draw_no, actual_ratio,
+		        count_0_6, count_1_5, count_2_4, count_3_3, count_4_2, count_5_1, count_6_0,
+		        prob_0_6, prob_1_5, prob_2_4, prob_3_3, prob_4_2, prob_5_1, prob_6_0,
+		        calculated_at
+		 FROM lotto_odd_even_stats
+		 ORDER BY draw_no DESC
+		 LIMIT $1`, limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var stats []OddEvenStatDB
+	for rows.Next() {
+		var stat OddEvenStatDB
+		if err := rows.Scan(
+			&stat.DrawNo, &stat.ActualRatio,
+			&stat.Count0_6, &stat.Count1_5, &stat.Count2_4, &stat.Count3_3, &stat.Count4_2, &stat.Count5_1, &stat.Count6_0,
+			&stat.Prob0_6, &stat.Prob1_5, &stat.Prob2_4, &stat.Prob3_3, &stat.Prob4_2, &stat.Prob5_1, &stat.Prob6_0,
+			&stat.CalculatedAt,
+		); err != nil {
+			return nil, err
+		}
+		stats = append(stats, stat)
+	}
+	return stats, rows.Err()
+}
+
+// GetOddEvenStatsWithZeroProb prob이 모두 0인 행 조회 (수정 필요한 행)
+func (r *Repository) GetOddEvenStatsWithZeroProb(ctx context.Context) ([]OddEvenStatDB, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT draw_no, actual_ratio,
+		        count_0_6, count_1_5, count_2_4, count_3_3, count_4_2, count_5_1, count_6_0,
+		        prob_0_6, prob_1_5, prob_2_4, prob_3_3, prob_4_2, prob_5_1, prob_6_0,
+		        calculated_at
+		 FROM lotto_odd_even_stats
+		 WHERE prob_0_6 = 0 AND prob_1_5 = 0 AND prob_2_4 = 0 AND prob_3_3 = 0 AND prob_4_2 = 0 AND prob_5_1 = 0 AND prob_6_0 = 0
+		 ORDER BY draw_no ASC`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var stats []OddEvenStatDB
+	for rows.Next() {
+		var stat OddEvenStatDB
+		if err := rows.Scan(
+			&stat.DrawNo, &stat.ActualRatio,
+			&stat.Count0_6, &stat.Count1_5, &stat.Count2_4, &stat.Count3_3, &stat.Count4_2, &stat.Count5_1, &stat.Count6_0,
+			&stat.Prob0_6, &stat.Prob1_5, &stat.Prob2_4, &stat.Prob3_3, &stat.Prob4_2, &stat.Prob5_1, &stat.Prob6_0,
+			&stat.CalculatedAt,
+		); err != nil {
+			return nil, err
+		}
+		stats = append(stats, stat)
+	}
+	return stats, rows.Err()
+}
+
+// UpdateOddEvenStatsProb 홀짝 비율 통계 prob 업데이트
+func (r *Repository) UpdateOddEvenStatsProb(ctx context.Context, stat OddEvenStatDB) error {
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE lotto_odd_even_stats
+		 SET prob_0_6 = $1, prob_1_5 = $2, prob_2_4 = $3, prob_3_3 = $4, prob_4_2 = $5, prob_5_1 = $6, prob_6_0 = $7,
+		     updated_at = NOW()
+		 WHERE draw_no = $8`,
+		stat.Prob0_6, stat.Prob1_5, stat.Prob2_4, stat.Prob3_3, stat.Prob4_2, stat.Prob5_1, stat.Prob6_0,
+		stat.DrawNo,
+	)
+	return err
+}

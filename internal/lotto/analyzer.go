@@ -2012,3 +2012,247 @@ func (a *Analyzer) FixZeroConsecutiveProbability(ctx context.Context) (int, erro
 	a.log.Infof("FixZeroConsecutiveProbability: updated %d rows successfully", len(zeroStats))
 	return len(zeroStats), nil
 }
+
+// countOddNumbers 6개 번호에서 홀수 개수 계산
+func countOddNumbers(nums []int) int {
+	count := 0
+	for _, n := range nums {
+		if n%2 == 1 {
+			count++
+		}
+	}
+	return count
+}
+
+// oddEvenRatioKey 홀짝 비율 키 생성 (예: "3:3")
+func oddEvenRatioKey(oddCount int) string {
+	evenCount := 6 - oddCount
+	return fmt.Sprintf("%d:%d", oddCount, evenCount)
+}
+
+// CalculateOddEvenStatsDB 홀짝 비율 통계 증분 계산 (새 회차만)
+func (a *Analyzer) CalculateOddEvenStatsDB(ctx context.Context) error {
+	a.log.Infof("CalculateOddEvenStatsDB: starting incremental calculation")
+
+	// 가장 최근 계산된 회차 조회
+	lastCalcDrawNo, err := a.repo.GetLatestOddEvenStatsDrawNo(ctx)
+	if err != nil {
+		a.log.Errorf("CalculateOddEvenStatsDB: failed to get latest draw no: %v", err)
+		return err
+	}
+
+	// 전체 계산이 필요한 경우 (테이블이 비어있는 경우)
+	if lastCalcDrawNo == 0 {
+		a.log.Infof("CalculateOddEvenStatsDB: no existing data, running full calculation")
+		return a.CalculateFullOddEvenStatsDB(ctx)
+	}
+
+	// 가장 최신 당첨번호 회차 조회
+	latestDrawNo, err := a.repo.GetLatestDrawNo(ctx)
+	if err != nil {
+		a.log.Errorf("CalculateOddEvenStatsDB: failed to get latest draw no: %v", err)
+		return err
+	}
+
+	if lastCalcDrawNo >= latestDrawNo {
+		a.log.Infof("CalculateOddEvenStatsDB: already up to date (draw %d)", lastCalcDrawNo)
+		return nil
+	}
+
+	// 이전 회차의 통계 조회
+	prevStat, err := a.repo.GetOddEvenStatsByDrawNo(ctx, lastCalcDrawNo)
+	if err != nil {
+		a.log.Errorf("CalculateOddEvenStatsDB: failed to get previous stats: %v", err)
+		return err
+	}
+
+	// 누적 카운트 초기화
+	count0_6, count1_5, count2_4, count3_3, count4_2, count5_1, count6_0 := 0, 0, 0, 0, 0, 0, 0
+	if prevStat != nil {
+		count0_6 = prevStat.Count0_6
+		count1_5 = prevStat.Count1_5
+		count2_4 = prevStat.Count2_4
+		count3_3 = prevStat.Count3_3
+		count4_2 = prevStat.Count4_2
+		count5_1 = prevStat.Count5_1
+		count6_0 = prevStat.Count6_0
+	}
+
+	// 새 회차들 계산
+	for drawNo := lastCalcDrawNo + 1; drawNo <= latestDrawNo; drawNo++ {
+		draw, err := a.repo.GetDrawByNo(ctx, drawNo)
+		if err != nil {
+			a.log.Warnf("CalculateOddEvenStatsDB: skipping draw %d: %v", drawNo, err)
+			continue
+		}
+
+		// 홀수 개수 계산
+		nums := draw.Numbers()
+		oddCount := countOddNumbers(nums)
+		ratio := oddEvenRatioKey(oddCount)
+
+		// 해당 비율의 카운트 증가
+		switch oddCount {
+		case 0:
+			count0_6++
+		case 1:
+			count1_5++
+		case 2:
+			count2_4++
+		case 3:
+			count3_3++
+		case 4:
+			count4_2++
+		case 5:
+			count5_1++
+		case 6:
+			count6_0++
+		}
+
+		// 확률 계산
+		newStat := OddEvenStatDB{
+			DrawNo:      drawNo,
+			ActualRatio: ratio,
+			Count0_6:    count0_6,
+			Count1_5:    count1_5,
+			Count2_4:    count2_4,
+			Count3_3:    count3_3,
+			Count4_2:    count4_2,
+			Count5_1:    count5_1,
+			Count6_0:    count6_0,
+			Prob0_6:     float64(count0_6) / float64(drawNo),
+			Prob1_5:     float64(count1_5) / float64(drawNo),
+			Prob2_4:     float64(count2_4) / float64(drawNo),
+			Prob3_3:     float64(count3_3) / float64(drawNo),
+			Prob4_2:     float64(count4_2) / float64(drawNo),
+			Prob5_1:     float64(count5_1) / float64(drawNo),
+			Prob6_0:     float64(count6_0) / float64(drawNo),
+		}
+
+		// DB에 저장
+		if err := a.repo.UpsertOddEvenStats(ctx, newStat); err != nil {
+			a.log.Errorf("CalculateOddEvenStatsDB: failed to upsert stats for draw %d: %v", drawNo, err)
+			return err
+		}
+
+		a.log.Infof("CalculateOddEvenStatsDB: calculated draw %d (ratio: %s)", drawNo, ratio)
+	}
+
+	a.log.Infof("CalculateOddEvenStatsDB: completed (draw %d to %d)", lastCalcDrawNo+1, latestDrawNo)
+	return nil
+}
+
+// CalculateFullOddEvenStatsDB 홀짝 비율 통계 전체 재계산
+func (a *Analyzer) CalculateFullOddEvenStatsDB(ctx context.Context) error {
+	a.log.Infof("CalculateFullOddEvenStatsDB: starting full calculation")
+
+	// 모든 당첨번호 조회
+	draws, err := a.repo.GetAllDraws(ctx)
+	if err != nil {
+		a.log.Errorf("CalculateFullOddEvenStatsDB: failed to get all draws: %v", err)
+		return err
+	}
+
+	if len(draws) == 0 {
+		a.log.Infof("CalculateFullOddEvenStatsDB: no draws found")
+		return nil
+	}
+
+	// 누적 카운트 초기화
+	count0_6, count1_5, count2_4, count3_3, count4_2, count5_1, count6_0 := 0, 0, 0, 0, 0, 0, 0
+
+	// 각 회차별 계산
+	for _, draw := range draws {
+		// 홀수 개수 계산
+		nums := draw.Numbers()
+		oddCount := countOddNumbers(nums)
+		ratio := oddEvenRatioKey(oddCount)
+
+		// 해당 비율의 카운트 증가
+		switch oddCount {
+		case 0:
+			count0_6++
+		case 1:
+			count1_5++
+		case 2:
+			count2_4++
+		case 3:
+			count3_3++
+		case 4:
+			count4_2++
+		case 5:
+			count5_1++
+		case 6:
+			count6_0++
+		}
+
+		// 확률 계산
+		newStat := OddEvenStatDB{
+			DrawNo:      draw.DrawNo,
+			ActualRatio: ratio,
+			Count0_6:    count0_6,
+			Count1_5:    count1_5,
+			Count2_4:    count2_4,
+			Count3_3:    count3_3,
+			Count4_2:    count4_2,
+			Count5_1:    count5_1,
+			Count6_0:    count6_0,
+			Prob0_6:     float64(count0_6) / float64(draw.DrawNo),
+			Prob1_5:     float64(count1_5) / float64(draw.DrawNo),
+			Prob2_4:     float64(count2_4) / float64(draw.DrawNo),
+			Prob3_3:     float64(count3_3) / float64(draw.DrawNo),
+			Prob4_2:     float64(count4_2) / float64(draw.DrawNo),
+			Prob5_1:     float64(count5_1) / float64(draw.DrawNo),
+			Prob6_0:     float64(count6_0) / float64(draw.DrawNo),
+		}
+
+		// DB에 저장
+		if err := a.repo.UpsertOddEvenStats(ctx, newStat); err != nil {
+			a.log.Errorf("CalculateFullOddEvenStatsDB: failed to upsert stats for draw %d: %v", draw.DrawNo, err)
+			return err
+		}
+	}
+
+	a.log.Infof("CalculateFullOddEvenStatsDB: completed successfully (%d draws)", len(draws))
+	return nil
+}
+
+// FixZeroOddEvenProbability prob이 모두 0인 행을 찾아서 수정
+func (a *Analyzer) FixZeroOddEvenProbability(ctx context.Context) (int, error) {
+	a.log.Infof("FixZeroOddEvenProbability: starting")
+
+	// prob이 모두 0인 행 조회
+	zeroStats, err := a.repo.GetOddEvenStatsWithZeroProb(ctx)
+	if err != nil {
+		a.log.Errorf("FixZeroOddEvenProbability: failed to get zero prob stats: %v", err)
+		return 0, err
+	}
+
+	if len(zeroStats) == 0 {
+		a.log.Infof("FixZeroOddEvenProbability: no rows with zero probability found")
+		return 0, nil
+	}
+
+	a.log.Infof("FixZeroOddEvenProbability: found %d rows with zero probability", len(zeroStats))
+
+	// 확률 재계산 및 업데이트
+	for i, stat := range zeroStats {
+		if stat.DrawNo > 0 {
+			stat.Prob0_6 = float64(stat.Count0_6) / float64(stat.DrawNo)
+			stat.Prob1_5 = float64(stat.Count1_5) / float64(stat.DrawNo)
+			stat.Prob2_4 = float64(stat.Count2_4) / float64(stat.DrawNo)
+			stat.Prob3_3 = float64(stat.Count3_3) / float64(stat.DrawNo)
+			stat.Prob4_2 = float64(stat.Count4_2) / float64(stat.DrawNo)
+			stat.Prob5_1 = float64(stat.Count5_1) / float64(stat.DrawNo)
+			stat.Prob6_0 = float64(stat.Count6_0) / float64(stat.DrawNo)
+		}
+
+		if err := a.repo.UpdateOddEvenStatsProb(ctx, stat); err != nil {
+			a.log.Errorf("FixZeroOddEvenProbability: failed to update stats for draw %d: %v", stat.DrawNo, err)
+			return i, err
+		}
+	}
+
+	a.log.Infof("FixZeroOddEvenProbability: updated %d rows successfully", len(zeroStats))
+	return len(zeroStats), nil
+}

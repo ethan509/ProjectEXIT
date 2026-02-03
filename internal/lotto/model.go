@@ -144,6 +144,28 @@ type ConsecutiveStatDB struct {
 	CalculatedAt time.Time `json:"calculated_at"`
 }
 
+// OddEvenStatDB 홀짝 비율 통계 (DB 저장용)
+// 회차별 홀수:짝수 비율 확률 추이를 저장
+type OddEvenStatDB struct {
+	DrawNo       int       `json:"draw_no"`       // 회차 번호
+	ActualRatio  string    `json:"actual_ratio"`  // 해당 회차의 실제 비율 (예: "3:3")
+	Count0_6     int       `json:"count_0_6"`     // 홀0:짝6 누적 횟수
+	Count1_5     int       `json:"count_1_5"`     // 홀1:짝5 누적 횟수
+	Count2_4     int       `json:"count_2_4"`     // 홀2:짝4 누적 횟수
+	Count3_3     int       `json:"count_3_3"`     // 홀3:짝3 누적 횟수
+	Count4_2     int       `json:"count_4_2"`     // 홀4:짝2 누적 횟수
+	Count5_1     int       `json:"count_5_1"`     // 홀5:짝1 누적 횟수
+	Count6_0     int       `json:"count_6_0"`     // 홀6:짝0 누적 횟수
+	Prob0_6      float64   `json:"prob_0_6"`      // 홀0:짝6 확률
+	Prob1_5      float64   `json:"prob_1_5"`      // 홀1:짝5 확률
+	Prob2_4      float64   `json:"prob_2_4"`      // 홀2:짝4 확률
+	Prob3_3      float64   `json:"prob_3_3"`      // 홀3:짝3 확률
+	Prob4_2      float64   `json:"prob_4_2"`      // 홀4:짝2 확률
+	Prob5_1      float64   `json:"prob_5_1"`      // 홀5:짝1 확률
+	Prob6_0      float64   `json:"prob_6_0"`      // 홀6:짝0 확률
+	CalculatedAt time.Time `json:"calculated_at"`
+}
+
 // RatioStat 비율별 통계 (홀짝, 고저)
 type RatioStat struct {
 	Ratio       string  `json:"ratio"`       // 비율 표현 (예: "3:3", "4:2")
