@@ -14,6 +14,25 @@ const (
 	TierVIP    TierCode = "VIP"    // VIP (특별 등급)
 )
 
+// Gender 성별 코드
+type Gender string
+
+const (
+	GenderMale   Gender = "M" // 남성
+	GenderFemale Gender = "F" // 여성
+	GenderOther  Gender = "O" // 기타
+)
+
+// PurchaseFrequency 로또 구매 빈도
+type PurchaseFrequency string
+
+const (
+	FreqWeekly    PurchaseFrequency = "WEEKLY"    // 주1회
+	FreqMonthly   PurchaseFrequency = "MONTHLY"   // 월1회
+	FreqBimonthly PurchaseFrequency = "BIMONTHLY" // 월2~3회
+	FreqIrregular PurchaseFrequency = "IRREGULAR" // 비정기
+)
+
 // MembershipTier 회원 등급 메타 정보
 type MembershipTier struct {
 	ID          int       `json:"id"`
@@ -27,14 +46,19 @@ type MembershipTier struct {
 }
 
 type User struct {
-	ID           int64           `json:"id"`
-	DeviceID     *string         `json:"device_id,omitempty"`
-	Email        *string         `json:"email,omitempty"`
-	PasswordHash *string         `json:"-"`
-	LottoTier    int             `json:"lotto_tier"`
-	Tier         *MembershipTier `json:"tier,omitempty"`
-	CreatedAt    time.Time       `json:"created_at"`
-	UpdatedAt    time.Time       `json:"updated_at"`
+	ID                int64              `json:"id"`
+	DeviceID          *string            `json:"device_id,omitempty"`
+	Email             *string            `json:"email,omitempty"`
+	PasswordHash      *string            `json:"-"`
+	LottoTier         int                `json:"lotto_tier"`
+	Tier              *MembershipTier    `json:"tier,omitempty"`
+	Gender            *Gender            `json:"gender,omitempty"`
+	BirthDate         *time.Time         `json:"birth_date,omitempty"`
+	Region            *string            `json:"region,omitempty"`
+	Nickname          *string            `json:"nickname,omitempty"`
+	PurchaseFrequency *PurchaseFrequency `json:"purchase_frequency,omitempty"`
+	CreatedAt         time.Time          `json:"created_at"`
+	UpdatedAt         time.Time          `json:"updated_at"`
 }
 
 // IsMember 정회원 이상인지 확인 (하위 호환용)
@@ -74,9 +98,14 @@ type GuestLoginRequest struct {
 }
 
 type EmailRegisterRequest struct {
-	Email    string `json:"email"`
-	Password string `json:"password"`
-	Code     string `json:"code"`
+	Email             string  `json:"email"`
+	Password          string  `json:"password"`
+	Code              string  `json:"code"`
+	Gender            string  `json:"gender"`              // 필수: M, F, O
+	BirthDate         string  `json:"birth_date"`          // 필수: YYYY-MM-DD
+	Region            *string `json:"region,omitempty"`    // 옵션: 거주지역
+	Nickname          *string `json:"nickname,omitempty"`  // 옵션: 닉네임 (max 20자)
+	PurchaseFrequency *string `json:"purchase_frequency,omitempty"` // 옵션: WEEKLY, MONTHLY, BIMONTHLY, IRREGULAR
 }
 
 type EmailLoginRequest struct {
@@ -120,9 +149,14 @@ type TokenResponse struct {
 }
 
 type UserResponse struct {
-	ID    int64        `json:"id"`
-	Email *string      `json:"email,omitempty"`
-	Tier  TierResponse `json:"tier"`
+	ID                int64        `json:"id"`
+	Email             *string      `json:"email,omitempty"`
+	Tier              TierResponse `json:"tier"`
+	Gender            *Gender      `json:"gender,omitempty"`
+	BirthDate         *string      `json:"birth_date,omitempty"`
+	Region            *string      `json:"region,omitempty"`
+	Nickname          *string      `json:"nickname,omitempty"`
+	PurchaseFrequency *string      `json:"purchase_frequency,omitempty"`
 }
 
 type TierResponse struct {
