@@ -8,6 +8,7 @@ import (
 	"math/big"
 	"time"
 
+	"github.com/example/LottoSmash/internal/constants"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -40,14 +41,25 @@ func NewService(repo *Repository, jwt *JWTManager, emailSender EmailSender) *Ser
 // GuestLogin 비회원 로그인 (기기 ID 기반)
 func (s *Service) GuestLogin(ctx context.Context, deviceID string) (*TokenResponse, error) {
 	user, err := s.repo.GetUserByDeviceID(ctx, deviceID)
+	isNewUser := false
 	if errors.Is(err, ErrUserNotFound) {
 		user, err = s.repo.CreateGuestUser(ctx, deviceID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create guest user: %w", err)
 		}
+		isNewUser = true
 	} else if err != nil {
 		return nil, fmt.Errorf("failed to get user: %w", err)
 	}
+
+	// 신규 가입 시 Zam 보너스 지급
+	if isNewUser {
+		reward := constants.TierGuest.GetZamReward()
+		_ = s.repo.AddZam(ctx, user.ID, reward.RegisterBonus, string(constants.ZamTxRegisterBonus), "게스트 가입 보너스", nil)
+	}
+
+	// 일일 로그인 보상 지급
+	s.grantDailyLoginReward(ctx, user)
 
 	return s.generateTokens(ctx, user)
 }
@@ -80,6 +92,10 @@ func (s *Service) EmailRegister(ctx context.Context, email, password, code strin
 		return nil, err
 	}
 
+	// 회원가입 Zam 보너스 지급
+	reward := constants.TierMember.GetZamReward()
+	_ = s.repo.AddZam(ctx, user.ID, reward.RegisterBonus, string(constants.ZamTxRegisterBonus), "정회원 가입 보너스", nil)
+
 	return s.generateTokens(ctx, user)
 }
 
@@ -100,6 +116,9 @@ func (s *Service) EmailLogin(ctx context.Context, email, password string) (*Toke
 	if err := bcrypt.CompareHashAndPassword([]byte(*user.PasswordHash), []byte(password)); err != nil {
 		return nil, ErrInvalidCredentials
 	}
+
+	// 일일 로그인 보상 지급
+	s.grantDailyLoginReward(ctx, user)
 
 	return s.generateTokens(ctx, user)
 }
@@ -221,12 +240,13 @@ func (s *Service) GetUser(ctx context.Context, userID int64) (*UserResponse, err
 	}
 
 	resp := &UserResponse{
-		ID:       user.ID,
-		Email:    user.Email,
-		Tier:     tierResp,
-		Gender:   user.Gender,
-		Region:   user.Region,
-		Nickname: user.Nickname,
+		ID:         user.ID,
+		Email:      user.Email,
+		Tier:       tierResp,
+		ZamBalance: user.ZamBalance,
+		Gender:     user.Gender,
+		Region:     user.Region,
+		Nickname:   user.Nickname,
 	}
 
 	// birth_date 포맷팅
@@ -290,4 +310,27 @@ func generateCode() string {
 		code[i] = digits[n.Int64()]
 	}
 	return string(code)
+}
+
+// grantDailyLoginReward 일일 로그인 보상 지급
+func (s *Service) grantDailyLoginReward(ctx context.Context, user *User) {
+	// 오늘 이미 보상을 받았는지 확인
+	if user.LastDailyRewardAt != nil {
+		now := time.Now()
+		lastReward := *user.LastDailyRewardAt
+		// 같은 날이면 보상 지급하지 않음
+		if lastReward.Year() == now.Year() && lastReward.YearDay() == now.YearDay() {
+			return
+		}
+	}
+
+	// 등급에 따른 일일 보상 지급
+	tierLevel := constants.TierGuest
+	if user.Tier != nil {
+		tierLevel = constants.TierLevel(user.Tier.Level)
+	}
+	reward := tierLevel.GetZamReward()
+
+	_ = s.repo.AddZam(ctx, user.ID, reward.DailyLogin, string(constants.ZamTxDailyLogin), "일일 로그인 보상", nil)
+	_ = s.repo.UpdateLastDailyReward(ctx, user.ID)
 }

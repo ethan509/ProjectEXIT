@@ -95,3 +95,37 @@ const (
 	GoldLevel   = TierGold
 	VIPLevel    = TierVIP
 )
+
+// Zam 경제 시스템 상수
+type ZamTxType string
+
+const (
+	ZamTxRegisterBonus ZamTxType = "REGISTER_BONUS" // 회원가입 보너스
+	ZamTxDailyLogin    ZamTxType = "DAILY_LOGIN"    // 일일 로그인 보상
+	ZamTxPurchase      ZamTxType = "PURCHASE"       // 구매 (차감)
+	ZamTxRefund        ZamTxType = "REFUND"         // 환불
+	ZamTxReward        ZamTxType = "REWARD"         // 보상
+	ZamTxAdmin         ZamTxType = "ADMIN"          // 관리자 조정
+)
+
+// ZamReward 등급별 Zam 보상
+type ZamReward struct {
+	RegisterBonus int64 // 회원가입 보너스
+	DailyLogin    int64 // 일일 로그인 보상
+}
+
+// 등급별 Zam 보상 설정
+var ZamRewards = map[TierLevel]ZamReward{
+	TierGuest:  {RegisterBonus: 100, DailyLogin: 10},
+	TierMember: {RegisterBonus: 200, DailyLogin: 20},
+	TierGold:   {RegisterBonus: 2000, DailyLogin: 200},
+	TierVIP:    {RegisterBonus: 5000, DailyLogin: 500},
+}
+
+// GetZamReward 등급에 따른 Zam 보상 조회
+func (t TierLevel) GetZamReward() ZamReward {
+	if reward, ok := ZamRewards[t]; ok {
+		return reward
+	}
+	return ZamRewards[TierGuest]
+}

@@ -71,6 +71,7 @@ func (r *Repository) CreateMemberUser(ctx context.Context, email, passwordHash s
 func (r *Repository) GetUserByID(ctx context.Context, id int64) (*User, error) {
 	query := `
 		SELECT u.id, u.device_id, u.email, u.password_hash, u.lotto_tier,
+		       u.zam_balance, u.last_daily_reward_at,
 		       u.gender, u.birth_date, u.region, u.nickname, u.purchase_frequency,
 		       u.created_at, u.updated_at,
 		       t.id, t.code, t.name, t.level, t.description, t.is_active
@@ -82,7 +83,8 @@ func (r *Repository) GetUserByID(ctx context.Context, id int64) (*User, error) {
 	tier := &MembershipTier{}
 	err := r.db.QueryRowContext(ctx, query, id).Scan(
 		&user.ID, &user.DeviceID, &user.Email, &user.PasswordHash,
-		&user.LottoTier, &user.Gender, &user.BirthDate, &user.Region, &user.Nickname, &user.PurchaseFrequency,
+		&user.LottoTier, &user.ZamBalance, &user.LastDailyRewardAt,
+		&user.Gender, &user.BirthDate, &user.Region, &user.Nickname, &user.PurchaseFrequency,
 		&user.CreatedAt, &user.UpdatedAt,
 		&tier.ID, &tier.Code, &tier.Name, &tier.Level, &tier.Description, &tier.IsActive,
 	)
@@ -99,6 +101,7 @@ func (r *Repository) GetUserByID(ctx context.Context, id int64) (*User, error) {
 func (r *Repository) GetUserByDeviceID(ctx context.Context, deviceID string) (*User, error) {
 	query := `
 		SELECT u.id, u.device_id, u.email, u.password_hash, u.lotto_tier,
+		       u.zam_balance, u.last_daily_reward_at,
 		       u.gender, u.birth_date, u.region, u.nickname, u.purchase_frequency,
 		       u.created_at, u.updated_at,
 		       t.id, t.code, t.name, t.level, t.description, t.is_active
@@ -110,7 +113,8 @@ func (r *Repository) GetUserByDeviceID(ctx context.Context, deviceID string) (*U
 	tier := &MembershipTier{}
 	err := r.db.QueryRowContext(ctx, query, deviceID).Scan(
 		&user.ID, &user.DeviceID, &user.Email, &user.PasswordHash,
-		&user.LottoTier, &user.Gender, &user.BirthDate, &user.Region, &user.Nickname, &user.PurchaseFrequency,
+		&user.LottoTier, &user.ZamBalance, &user.LastDailyRewardAt,
+		&user.Gender, &user.BirthDate, &user.Region, &user.Nickname, &user.PurchaseFrequency,
 		&user.CreatedAt, &user.UpdatedAt,
 		&tier.ID, &tier.Code, &tier.Name, &tier.Level, &tier.Description, &tier.IsActive,
 	)
@@ -127,6 +131,7 @@ func (r *Repository) GetUserByDeviceID(ctx context.Context, deviceID string) (*U
 func (r *Repository) GetUserByEmail(ctx context.Context, email string) (*User, error) {
 	query := `
 		SELECT u.id, u.device_id, u.email, u.password_hash, u.lotto_tier,
+		       u.zam_balance, u.last_daily_reward_at,
 		       u.gender, u.birth_date, u.region, u.nickname, u.purchase_frequency,
 		       u.created_at, u.updated_at,
 		       t.id, t.code, t.name, t.level, t.description, t.is_active
@@ -138,7 +143,8 @@ func (r *Repository) GetUserByEmail(ctx context.Context, email string) (*User, e
 	tier := &MembershipTier{}
 	err := r.db.QueryRowContext(ctx, query, email).Scan(
 		&user.ID, &user.DeviceID, &user.Email, &user.PasswordHash,
-		&user.LottoTier, &user.Gender, &user.BirthDate, &user.Region, &user.Nickname, &user.PurchaseFrequency,
+		&user.LottoTier, &user.ZamBalance, &user.LastDailyRewardAt,
+		&user.Gender, &user.BirthDate, &user.Region, &user.Nickname, &user.PurchaseFrequency,
 		&user.CreatedAt, &user.UpdatedAt,
 		&tier.ID, &tier.Code, &tier.Name, &tier.Level, &tier.Description, &tier.IsActive,
 	)
@@ -347,4 +353,87 @@ func (r *Repository) UpdateUserTier(ctx context.Context, userID int64, tierID in
 	query := `UPDATE users SET lotto_tier = $1, updated_at = NOW() WHERE id = $2`
 	_, err := r.db.ExecContext(ctx, query, tierID, userID)
 	return err
+}
+
+// ========================================
+// Zam (Economy) methods
+// ========================================
+
+// AddZam adds zam to user balance and creates transaction record
+func (r *Repository) AddZam(ctx context.Context, userID int64, amount int64, txType, description string, referenceID *string) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	// Update user balance
+	var newBalance int64
+	updateQuery := `
+		UPDATE users
+		SET zam_balance = zam_balance + $1, updated_at = NOW()
+		WHERE id = $2
+		RETURNING zam_balance
+	`
+	err = tx.QueryRowContext(ctx, updateQuery, amount, userID).Scan(&newBalance)
+	if err != nil {
+		return err
+	}
+
+	// Create transaction record
+	insertQuery := `
+		INSERT INTO zam_transactions (user_id, amount, balance_after, tx_type, description, reference_id, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, NOW())
+	`
+	_, err = tx.ExecContext(ctx, insertQuery, userID, amount, newBalance, txType, description, referenceID)
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+// UpdateLastDailyReward updates the last daily reward timestamp
+func (r *Repository) UpdateLastDailyReward(ctx context.Context, userID int64) error {
+	query := `UPDATE users SET last_daily_reward_at = NOW(), updated_at = NOW() WHERE id = $1`
+	_, err := r.db.ExecContext(ctx, query, userID)
+	return err
+}
+
+// GetZamTransactions gets zam transaction history for a user
+func (r *Repository) GetZamTransactions(ctx context.Context, userID int64, limit, offset int) ([]ZamTransaction, error) {
+	query := `
+		SELECT id, user_id, amount, balance_after, tx_type, description, reference_id, created_at
+		FROM zam_transactions
+		WHERE user_id = $1
+		ORDER BY created_at DESC
+		LIMIT $2 OFFSET $3
+	`
+	rows, err := r.db.QueryContext(ctx, query, userID, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var transactions []ZamTransaction
+	for rows.Next() {
+		var t ZamTransaction
+		err := rows.Scan(&t.ID, &t.UserID, &t.Amount, &t.BalanceAfter, &t.TxType, &t.Description, &t.ReferenceID, &t.CreatedAt)
+		if err != nil {
+			return nil, err
+		}
+		transactions = append(transactions, t)
+	}
+	return transactions, rows.Err()
+}
+
+// GetUserZamBalance gets user's current zam balance
+func (r *Repository) GetUserZamBalance(ctx context.Context, userID int64) (int64, error) {
+	query := `SELECT zam_balance FROM users WHERE id = $1`
+	var balance int64
+	err := r.db.QueryRowContext(ctx, query, userID).Scan(&balance)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, ErrUserNotFound
+	}
+	return balance, err
 }

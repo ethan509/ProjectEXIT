@@ -58,19 +58,21 @@ func (m *MembershipTier) TierLevel() TierLevel {
 }
 
 type User struct {
-	ID                int64              `json:"id"`
-	DeviceID          *string            `json:"device_id,omitempty"`
-	Email             *string            `json:"email,omitempty"`
-	PasswordHash      *string            `json:"-"`
-	LottoTier         int                `json:"lotto_tier"`
-	Tier              *MembershipTier    `json:"tier,omitempty"`
-	Gender            *Gender            `json:"gender,omitempty"`
-	BirthDate         *time.Time         `json:"birth_date,omitempty"`
-	Region            *string            `json:"region,omitempty"`
-	Nickname          *string            `json:"nickname,omitempty"`
-	PurchaseFrequency *PurchaseFrequency `json:"purchase_frequency,omitempty"`
-	CreatedAt         time.Time          `json:"created_at"`
-	UpdatedAt         time.Time          `json:"updated_at"`
+	ID                  int64              `json:"id"`
+	DeviceID            *string            `json:"device_id,omitempty"`
+	Email               *string            `json:"email,omitempty"`
+	PasswordHash        *string            `json:"-"`
+	LottoTier           int                `json:"lotto_tier"`
+	Tier                *MembershipTier    `json:"tier,omitempty"`
+	ZamBalance          int64              `json:"zam_balance"`
+	LastDailyRewardAt   *time.Time         `json:"last_daily_reward_at,omitempty"`
+	Gender              *Gender            `json:"gender,omitempty"`
+	BirthDate           *time.Time         `json:"birth_date,omitempty"`
+	Region              *string            `json:"region,omitempty"`
+	Nickname            *string            `json:"nickname,omitempty"`
+	PurchaseFrequency   *PurchaseFrequency `json:"purchase_frequency,omitempty"`
+	CreatedAt           time.Time          `json:"created_at"`
+	UpdatedAt           time.Time          `json:"updated_at"`
 }
 
 // IsMember 정회원 이상인지 확인 (하위 호환용)
@@ -164,11 +166,24 @@ type UserResponse struct {
 	ID                int64        `json:"id"`
 	Email             *string      `json:"email,omitempty"`
 	Tier              TierResponse `json:"tier"`
+	ZamBalance        int64        `json:"zam_balance"`
 	Gender            *Gender      `json:"gender,omitempty"`
 	BirthDate         *string      `json:"birth_date,omitempty"`
 	Region            *string      `json:"region,omitempty"`
 	Nickname          *string      `json:"nickname,omitempty"`
 	PurchaseFrequency *string      `json:"purchase_frequency,omitempty"`
+}
+
+// ZamTransaction Zam 거래 이력
+type ZamTransaction struct {
+	ID           int64     `json:"id"`
+	UserID       int64     `json:"user_id"`
+	Amount       int64     `json:"amount"`        // positive: credit, negative: debit
+	BalanceAfter int64     `json:"balance_after"` // balance after this transaction
+	TxType       string    `json:"tx_type"`       // REGISTER_BONUS, DAILY_LOGIN, etc.
+	Description  *string   `json:"description,omitempty"`
+	ReferenceID  *string   `json:"reference_id,omitempty"`
+	CreatedAt    time.Time `json:"created_at"`
 }
 
 type TierResponse struct {
