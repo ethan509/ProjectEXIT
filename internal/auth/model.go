@@ -2,17 +2,24 @@ package auth
 
 import (
 	"time"
+
+	"github.com/example/LottoSmash/internal/constants"
 )
 
-// TierCode 회원 등급 코드 상수
-type TierCode string
+// TierLevel 별칭 (하위 호환)
+type TierLevel = constants.TierLevel
 
+// 하위 호환용 상수 별칭
 const (
-	TierGuest  TierCode = "GUEST"  // 게스트 (회원가입 안함)
-	TierMember TierCode = "MEMBER" // 정회원 (회원가입 완료)
-	TierGold   TierCode = "GOLD"   // 골드 (월정액 구독)
-	TierVIP    TierCode = "VIP"    // VIP (특별 등급)
+	TierGuest  = constants.TierGuest
+	TierMember = constants.TierMember
+	TierGold   = constants.TierGold
+	TierVIP    = constants.TierVIP
 )
+
+// TierCode는 TierLevel의 별칭 (하위 호환)
+// Deprecated: TierLevel 사용 권장
+type TierCode = constants.TierLevel
 
 // Gender 성별 코드
 type Gender string
@@ -36,13 +43,18 @@ const (
 // MembershipTier 회원 등급 메타 정보
 type MembershipTier struct {
 	ID          int       `json:"id"`
-	Code        TierCode  `json:"code"`
+	Code        string    `json:"code"` // DB에서 string으로 저장됨
 	Name        string    `json:"name"`
 	Level       int       `json:"level"`
 	Description *string   `json:"description,omitempty"`
 	IsActive    bool      `json:"is_active"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
+}
+
+// TierLevel은 MembershipTier의 Level을 TierLevel 타입으로 반환
+func (m *MembershipTier) TierLevel() TierLevel {
+	return TierLevel(m.Level)
 }
 
 type User struct {
@@ -160,7 +172,7 @@ type UserResponse struct {
 }
 
 type TierResponse struct {
-	Code  TierCode `json:"code"`
-	Name  string   `json:"name"`
-	Level int      `json:"level"`
+	Code  string `json:"code"`
+	Name  string `json:"name"`
+	Level int    `json:"level"`
 }

@@ -208,9 +208,9 @@ func (s *Service) GetUser(ctx context.Context, userID int64) (*UserResponse, err
 	}
 
 	tierResp := TierResponse{
-		Code:  TierGuest,
-		Name:  "게스트",
-		Level: 0,
+		Code:  TierGuest.String(),
+		Name:  TierGuest.Name(),
+		Level: int(TierGuest),
 	}
 	if user.Tier != nil {
 		tierResp = TierResponse{
@@ -250,8 +250,8 @@ func (s *Service) GetAllTiers(ctx context.Context) ([]MembershipTier, error) {
 }
 
 // UpdateUserTier 사용자 등급 변경
-func (s *Service) UpdateUserTier(ctx context.Context, userID int64, tierCode TierCode) error {
-	tier, err := s.repo.GetTierByCode(ctx, tierCode)
+func (s *Service) UpdateUserTier(ctx context.Context, userID int64, tierLevel TierLevel) error {
+	tier, err := s.repo.GetTierByCode(ctx, tierLevel.String())
 	if err != nil {
 		return err
 	}
