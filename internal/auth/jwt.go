@@ -25,10 +25,10 @@ type JWTManager struct {
 }
 
 type Claims struct {
-	UserID    int64    `json:"user_id"`
-	LottoTier int      `json:"lotto_tier"`
-	TierCode  TierCode `json:"tier_code"`
-	TierLevel int      `json:"tier_level"`
+	UserID    int64  `json:"user_id"`
+	LottoTier int    `json:"lotto_tier"`
+	TierCode  string `json:"tier_code"`  // string으로 저장 (GUEST, MEMBER, GOLD, VIP)
+	TierLevel int    `json:"tier_level"` // int로 저장 (0, 1, 2, 3)
 	jwt.RegisteredClaims
 }
 
@@ -49,7 +49,7 @@ func (j *JWTManager) GenerateAccessToken(user *User) (string, error) {
 	now := time.Now()
 
 	lottoTier := user.LottoTier
-	tierCode := TierGuest
+	tierCode := TierGuest.String()
 	tierLevel := 0
 	if user.Tier != nil {
 		tierCode = user.Tier.Code

@@ -296,7 +296,7 @@ func (r *Repository) GetTierByID(ctx context.Context, id int) (*MembershipTier, 
 	return tier, nil
 }
 
-func (r *Repository) GetTierByCode(ctx context.Context, code TierCode) (*MembershipTier, error) {
+func (r *Repository) GetTierByCode(ctx context.Context, code string) (*MembershipTier, error) {
 	query := `
 		SELECT id, code, name, level, description, is_active, created_at, updated_at
 		FROM membership_tiers WHERE code = $1

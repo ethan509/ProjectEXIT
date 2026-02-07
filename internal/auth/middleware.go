@@ -4,6 +4,8 @@ import (
 	"context"
 	"net/http"
 	"strings"
+
+	"github.com/example/LottoSmash/internal/constants"
 )
 
 type contextKey string
@@ -39,21 +41,21 @@ func (m *Middleware) RequireAuth(next http.Handler) http.Handler {
 
 // RequireMember 정회원 이상 전용 미들웨어
 func (m *Middleware) RequireMember(next http.Handler) http.Handler {
-	return m.RequireTierLevel(1, next) // MEMBER level = 1
+	return m.RequireTierLevel(constants.MemberLevel, next)
 }
 
 // RequireGold 골드 이상 전용 미들웨어
 func (m *Middleware) RequireGold(next http.Handler) http.Handler {
-	return m.RequireTierLevel(2, next) // GOLD level = 2
+	return m.RequireTierLevel(constants.GoldLevel, next)
 }
 
 // RequireVIP VIP 전용 미들웨어
 func (m *Middleware) RequireVIP(next http.Handler) http.Handler {
-	return m.RequireTierLevel(3, next) // VIP level = 3
+	return m.RequireTierLevel(constants.VIPLevel, next)
 }
 
 // RequireTierLevel 특정 등급 레벨 이상 필요 미들웨어
-func (m *Middleware) RequireTierLevel(requiredLevel int, next http.Handler) http.Handler {
+func (m *Middleware) RequireTierLevel(requiredLevel TierLevel, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		claims, err := m.extractClaims(r)
 		if err != nil {
@@ -61,7 +63,7 @@ func (m *Middleware) RequireTierLevel(requiredLevel int, next http.Handler) http
 			return
 		}
 
-		if claims.TierLevel < requiredLevel {
+		if claims.TierLevel < int(requiredLevel) {
 			http.Error(w, `{"error":"insufficient tier level"}`, http.StatusForbidden)
 			return
 		}
@@ -118,8 +120,8 @@ func GetTierLevel(ctx context.Context) (int, bool) {
 }
 
 // GetTierCode 컨텍스트에서 등급 코드 추출
-func GetTierCode(ctx context.Context) (TierCode, bool) {
-	code, ok := ctx.Value(TierCodeKey).(TierCode)
+func GetTierCode(ctx context.Context) (string, bool) {
+	code, ok := ctx.Value(TierCodeKey).(string)
 	return code, ok
 }
 
