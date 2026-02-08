@@ -18,6 +18,7 @@ import (
 	"github.com/example/LottoSmash/internal/scheduler"
 	"github.com/example/LottoSmash/internal/server"
 	"github.com/example/LottoSmash/internal/worker"
+	"github.com/example/LottoSmash/internal/zamhistory"
 )
 
 func main() {
@@ -143,6 +144,20 @@ func main() {
 		}
 	}
 
+	// zam history buffer
+	var zamHistoryBuffer *zamhistory.Buffer
+	if db != nil {
+		zamHistoryRepo := zamhistory.NewRepository(db)
+		loc, err := time.LoadLocation(cfgMgr.Config().Scheduler.Timezone)
+		if err != nil {
+			loc = time.UTC
+			lg.Warnf("failed to load timezone %q, using UTC: %v", cfgMgr.Config().Scheduler.Timezone, err)
+		}
+		zamHistoryBuffer = zamhistory.NewBuffer(zamHistoryRepo, lg, loc)
+		go zamHistoryBuffer.Start(ctx)
+		lg.Infof("zam history buffer initialized")
+	}
+
 	// scheduler (DB 연결 후 시작)
 	if cfgMgr.Config().Scheduler.Enabled {
 		sched, err := scheduler.New(cfgMgr.Config(), lg, lottoSvc)
@@ -154,11 +169,12 @@ func main() {
 	}
 
 	deps := server.Dependencies{
-		ConfigMgr: cfgMgr,
-		Logger:    lg,
-		Pools:     pools,
-		DB:        db,
-		LottoSvc:  lottoSvc,
+		ConfigMgr:        cfgMgr,
+		Logger:           lg,
+		Pools:            pools,
+		DB:               db,
+		LottoSvc:         lottoSvc,
+		ZamHistoryBuffer: zamHistoryBuffer,
 	}
 	router := server.NewRouter(deps)
 
@@ -193,6 +209,13 @@ func main() {
 	// graceful shutdown (max 1 minute)
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), time.Minute)
 	defer shutdownCancel()
+
+	// flush remaining zam history buffer before shutdown
+	if zamHistoryBuffer != nil {
+		lg.Infof("flushing zam history buffer before shutdown")
+		zamHistoryBuffer.Flush(shutdownCtx)
+		lg.Infof("zam history buffer flushed")
+	}
 
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		lg.Errorf("server shutdown error: %v", err)

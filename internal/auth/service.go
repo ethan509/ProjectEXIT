@@ -24,10 +24,16 @@ type EmailSender interface {
 	SendPasswordResetEmail(email, code string) error
 }
 
+// ZamHistoryRecorder records Zam events for daily aggregation.
+type ZamHistoryRecorder interface {
+	Record(userID int64, amount int64, txType string)
+}
+
 type Service struct {
-	repo        *Repository
-	jwt         *JWTManager
-	emailSender EmailSender
+	repo               *Repository
+	jwt                *JWTManager
+	emailSender        EmailSender
+	zamHistoryRecorder ZamHistoryRecorder
 }
 
 func NewService(repo *Repository, jwt *JWTManager, emailSender EmailSender) *Service {
@@ -35,6 +41,17 @@ func NewService(repo *Repository, jwt *JWTManager, emailSender EmailSender) *Ser
 		repo:        repo,
 		jwt:         jwt,
 		emailSender: emailSender,
+	}
+}
+
+// SetZamHistoryRecorder sets the optional Zam history recorder.
+func (s *Service) SetZamHistoryRecorder(recorder ZamHistoryRecorder) {
+	s.zamHistoryRecorder = recorder
+}
+
+func (s *Service) recordZamHistory(userID, amount int64, txType string) {
+	if s.zamHistoryRecorder != nil {
+		s.zamHistoryRecorder.Record(userID, amount, txType)
 	}
 }
 
@@ -55,7 +72,9 @@ func (s *Service) GuestLogin(ctx context.Context, deviceID string) (*TokenRespon
 	// 신규 가입 시 Zam 보너스 지급
 	if isNewUser {
 		reward := constants.TierGuest.GetZamReward()
-		_ = s.repo.AddZam(ctx, user.ID, reward.RegisterBonus, string(constants.ZamTxRegisterBonus), "게스트 가입 보너스", nil)
+		if err := s.repo.AddZam(ctx, user.ID, reward.RegisterBonus, string(constants.ZamTxRegisterBonus), "게스트 가입 보너스", nil); err == nil {
+			s.recordZamHistory(user.ID, reward.RegisterBonus, string(constants.ZamTxRegisterBonus))
+		}
 	}
 
 	// 일일 로그인 보상 지급
@@ -94,7 +113,9 @@ func (s *Service) EmailRegister(ctx context.Context, email, password, code strin
 
 	// 회원가입 Zam 보너스 지급
 	reward := constants.TierMember.GetZamReward()
-	_ = s.repo.AddZam(ctx, user.ID, reward.RegisterBonus, string(constants.ZamTxRegisterBonus), "정회원 가입 보너스", nil)
+	if err := s.repo.AddZam(ctx, user.ID, reward.RegisterBonus, string(constants.ZamTxRegisterBonus), "정회원 가입 보너스", nil); err == nil {
+		s.recordZamHistory(user.ID, reward.RegisterBonus, string(constants.ZamTxRegisterBonus))
+	}
 
 	return s.generateTokens(ctx, user)
 }
@@ -331,6 +352,8 @@ func (s *Service) grantDailyLoginReward(ctx context.Context, user *User) {
 	}
 	reward := tierLevel.GetZamReward()
 
-	_ = s.repo.AddZam(ctx, user.ID, reward.DailyLogin, string(constants.ZamTxDailyLogin), "일일 로그인 보상", nil)
+	if err := s.repo.AddZam(ctx, user.ID, reward.DailyLogin, string(constants.ZamTxDailyLogin), "일일 로그인 보상", nil); err == nil {
+		s.recordZamHistory(user.ID, reward.DailyLogin, string(constants.ZamTxDailyLogin))
+	}
 	_ = s.repo.UpdateLastDailyReward(ctx, user.ID)
 }
