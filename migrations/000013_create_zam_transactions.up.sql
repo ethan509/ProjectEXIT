@@ -1,8 +1,4 @@
--- Add zam (economy currency) balance to users
-ALTER TABLE users ADD COLUMN IF NOT EXISTS zam_balance BIGINT NOT NULL DEFAULT 0;
-ALTER TABLE users ADD COLUMN IF NOT EXISTS last_daily_reward_at TIMESTAMP;
-
--- Create zam transactions table for history tracking
+-- Zam transactions table for history tracking
 CREATE TABLE IF NOT EXISTS zam_transactions (
     id              BIGSERIAL PRIMARY KEY,
     user_id         BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,

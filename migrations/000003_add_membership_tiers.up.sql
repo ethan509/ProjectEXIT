@@ -25,9 +25,6 @@ ON CONFLICT (code) DO NOTHING;
 ALTER TABLE users ADD CONSTRAINT fk_users_lotto_tier
     FOREIGN KEY (lotto_tier) REFERENCES membership_tiers(id);
 
--- is_member 컬럼 삭제
-ALTER TABLE users DROP COLUMN IF EXISTS is_member;
-
 -- 인덱스
 CREATE INDEX IF NOT EXISTS idx_users_lotto_tier ON users(lotto_tier);
 CREATE INDEX IF NOT EXISTS idx_membership_tiers_code ON membership_tiers(code);
