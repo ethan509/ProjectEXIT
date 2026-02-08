@@ -16,14 +16,16 @@ import (
 	"github.com/example/LottoSmash/internal/middleware"
 	"github.com/example/LottoSmash/internal/response"
 	"github.com/example/LottoSmash/internal/worker"
+	"github.com/example/LottoSmash/internal/zamhistory"
 )
 
 type Dependencies struct {
-	ConfigMgr config.Configger
-	Logger    *logger.Logger
-	Pools     *worker.Pools
-	DB        *sql.DB
-	LottoSvc  *lotto.Service
+	ConfigMgr        config.Configger
+	Logger           *logger.Logger
+	Pools            *worker.Pools
+	DB               *sql.DB
+	LottoSvc         *lotto.Service
+	ZamHistoryBuffer *zamhistory.Buffer
 }
 
 func NewRouter(deps Dependencies) http.Handler {
@@ -142,6 +144,9 @@ func setupAuth(deps Dependencies) *auth.Handler {
 	}
 
 	service := auth.NewService(repo, jwtManager, emailSender)
+	if deps.ZamHistoryBuffer != nil {
+		service.SetZamHistoryRecorder(deps.ZamHistoryBuffer)
+	}
 	return auth.NewHandler(service)
 }
 
