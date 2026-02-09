@@ -15,6 +15,7 @@ import (
 	"github.com/example/LottoSmash/internal/database"
 	"github.com/example/LottoSmash/internal/logger"
 	"github.com/example/LottoSmash/internal/lotto"
+	"github.com/example/LottoSmash/internal/notification"
 	"github.com/example/LottoSmash/internal/scheduler"
 	"github.com/example/LottoSmash/internal/server"
 	"github.com/example/LottoSmash/internal/worker"
@@ -144,6 +145,15 @@ func main() {
 		}
 	}
 
+	// notification service initialization
+	var notifSvc *notification.Service
+	if db != nil && lottoSvc != nil {
+		notifRepo := notification.NewRepository(db)
+		pushSender := notification.NewNoopPushSender(lg)
+		notifSvc = notification.NewService(notifRepo, lottoSvc, pushSender, lg)
+		lg.Infof("notification service initialized")
+	}
+
 	// zam history buffer
 	var zamHistoryBuffer *zamhistory.Buffer
 	if db != nil {
@@ -160,7 +170,7 @@ func main() {
 
 	// scheduler (DB 연결 후 시작)
 	if cfgMgr.Config().Scheduler.Enabled {
-		sched, err := scheduler.New(cfgMgr.Config(), lg, lottoSvc)
+		sched, err := scheduler.New(cfgMgr.Config(), lg, lottoSvc, notifSvc)
 		if err != nil {
 			lg.Errorf("failed to init scheduler: %v", err)
 		} else {
@@ -174,6 +184,7 @@ func main() {
 		Pools:            pools,
 		DB:               db,
 		LottoSvc:         lottoSvc,
+		NotifSvc:         notifSvc,
 		ZamHistoryBuffer: zamHistoryBuffer,
 	}
 	router := server.NewRouter(deps)

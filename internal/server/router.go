@@ -14,6 +14,7 @@ import (
 	"github.com/example/LottoSmash/internal/lotto"
 	"github.com/example/LottoSmash/internal/metrics"
 	"github.com/example/LottoSmash/internal/middleware"
+	"github.com/example/LottoSmash/internal/notification"
 	"github.com/example/LottoSmash/internal/response"
 	"github.com/example/LottoSmash/internal/worker"
 	"github.com/example/LottoSmash/internal/zamhistory"
@@ -25,6 +26,7 @@ type Dependencies struct {
 	Pools            *worker.Pools
 	DB               *sql.DB
 	LottoSvc         *lotto.Service
+	NotifSvc         *notification.Service
 	ZamHistoryBuffer *zamhistory.Buffer
 }
 
@@ -111,6 +113,19 @@ func NewRouter(deps Dependencies) http.Handler {
 			r.Route("/api/admin/lotto", func(r chi.Router) {
 				r.Use(authMiddleware.RequireAuth)
 				r.Post("/sync", lottoHandler.TriggerSync)
+			})
+		}
+
+		// notification routes (protected)
+		if deps.NotifSvc != nil {
+			notifHandler := notification.NewHandler(deps.NotifSvc)
+
+			r.Route("/api/notifications", func(r chi.Router) {
+				r.Use(authMiddleware.RequireAuth)
+				r.Post("/device-token", notifHandler.RegisterDeviceToken)
+				r.Delete("/device-token", notifHandler.DeleteDeviceToken)
+				r.Get("/", notifHandler.GetNotifications)
+				r.Get("/winnings", notifHandler.GetWinnings)
 			})
 		}
 	}

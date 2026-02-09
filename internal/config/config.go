@@ -75,6 +75,11 @@ type CrawlerConfig struct {
 	BatchDelayMs int `json:"batchDelayMs"` // 배치 간 딜레이 (밀리초)
 }
 
+type FCMConfig struct {
+	Enabled         bool   `json:"enabled"`
+	CredentialsFile string `json:"credentialsFile"`
+}
+
 type Config struct {
 	Server       ServerConfig       `json:"server"`
 	Logging      LoggingConfig      `json:"logging"`
@@ -85,6 +90,7 @@ type Config struct {
 	Database     DatabaseConfig     `json:"database"`
 	JWT          JWTConfig          `json:"jwt"`
 	SMTP         SMTPConfig         `json:"smtp"`
+	FCM          FCMConfig          `json:"fcm"`
 }
 
 type HotConfig struct {

@@ -547,6 +547,11 @@ func (s *Service) GetDrawByNo(ctx context.Context, drawNo int) (*LottoDraw, erro
 	return s.repo.GetDrawByNo(ctx, drawNo)
 }
 
+// GetLatestDrawNo DB에서 최신 회차 번호 조회
+func (s *Service) GetLatestDrawNo(ctx context.Context) (int, error) {
+	return s.repo.GetLatestDrawNo(ctx)
+}
+
 // GetStats 통계 조회
 func (s *Service) GetStats(ctx context.Context) (*StatsResponse, error) {
 	numberStats, err := s.repo.GetAllNumberStats(ctx)

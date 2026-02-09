@@ -7,16 +7,18 @@ import (
 	"github.com/example/LottoSmash/internal/config"
 	"github.com/example/LottoSmash/internal/logger"
 	"github.com/example/LottoSmash/internal/lotto"
+	"github.com/example/LottoSmash/internal/notification"
 )
 
 type Scheduler struct {
 	tz       *time.Location
 	log      *logger.Logger
 	lottoSvc *lotto.Service
+	notifSvc *notification.Service
 	quit     chan struct{}
 }
 
-func New(cfg config.Config, log *logger.Logger, lottoSvc *lotto.Service) (*Scheduler, error) {
+func New(cfg config.Config, log *logger.Logger, lottoSvc *lotto.Service, notifSvc *notification.Service) (*Scheduler, error) {
 	loc, err := time.LoadLocation(cfg.Scheduler.Timezone)
 	if err != nil {
 		return nil, err
@@ -25,6 +27,7 @@ func New(cfg config.Config, log *logger.Logger, lottoSvc *lotto.Service) (*Sched
 		tz:       loc,
 		log:      log,
 		lottoSvc: lottoSvc,
+		notifSvc: notifSvc,
 		quit:     make(chan struct{}),
 	}, nil
 }
@@ -144,6 +147,18 @@ func (s *Scheduler) runWeekly(ctx context.Context) {
 	if err := s.lottoSvc.RunAnalysis(ctx); err != nil {
 		s.log.Errorf("failed to run lotto analysis: %v", err)
 		return
+	}
+
+	// 당첨 확인 및 알림 발송
+	if s.notifSvc != nil {
+		latestDrawNo, err := s.lottoSvc.GetLatestDrawNo(ctx)
+		if err != nil {
+			s.log.Errorf("failed to get latest draw no for winning check: %v", err)
+		} else if latestDrawNo > 0 {
+			if err := s.notifSvc.ProcessNewDraw(ctx, latestDrawNo); err != nil {
+				s.log.Errorf("failed to process winning checks for draw %d: %v", latestDrawNo, err)
+			}
+		}
 	}
 
 	s.log.Infof("weekly lotto job completed")
