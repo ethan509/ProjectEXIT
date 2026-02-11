@@ -1966,12 +1966,12 @@ func (r *Repository) GetAnalysisMethodsByCodes(ctx context.Context, codes []stri
 // SaveRecommendation 추천 기록 저장
 func (r *Repository) SaveRecommendation(ctx context.Context, rec *LottoRecommendation) error {
 	query := `
-		INSERT INTO lotto_recommendations (user_id, method_codes, numbers, bonus_number, confidence, created_at)
-		VALUES ($1, $2, $3, $4, $5, NOW())
+		INSERT INTO lotto_recommendations (user_id, method_codes, combine_method, numbers, bonus_number, confidence, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, NOW())
 		RETURNING id, created_at`
 
 	err := r.db.QueryRowContext(ctx, query,
-		rec.UserID, rec.MethodCodes, rec.Numbers, rec.BonusNumber, rec.Confidence,
+		rec.UserID, rec.MethodCodes, rec.CombineMethod, rec.Numbers, rec.BonusNumber, rec.Confidence,
 	).Scan(&rec.ID, &rec.CreatedAt)
 
 	return err
@@ -1984,7 +1984,7 @@ func (r *Repository) GetRecommendationsByUserID(ctx context.Context, userID int6
 	}
 
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT id, user_id, method_codes, numbers, bonus_number, confidence, created_at
+		`SELECT id, user_id, method_codes, combine_method, numbers, bonus_number, confidence, created_at
 		 FROM lotto_recommendations
 		 WHERE user_id = $1
 		 ORDER BY created_at DESC
@@ -1999,7 +1999,7 @@ func (r *Repository) GetRecommendationsByUserID(ctx context.Context, userID int6
 	for rows.Next() {
 		var rec LottoRecommendation
 		if err := rows.Scan(
-			&rec.ID, &rec.UserID, &rec.MethodCodes, &rec.Numbers,
+			&rec.ID, &rec.UserID, &rec.MethodCodes, &rec.CombineMethod, &rec.Numbers,
 			&rec.BonusNumber, &rec.Confidence, &rec.CreatedAt,
 		); err != nil {
 			return nil, err

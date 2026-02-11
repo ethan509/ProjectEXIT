@@ -402,29 +402,32 @@ type AnalysisMethod struct {
 
 // LottoRecommendation 추천 기록
 type LottoRecommendation struct {
-	ID          int64     `json:"id"`
-	UserID      *int64    `json:"user_id,omitempty"`
-	MethodCodes []string  `json:"method_codes"`
-	Numbers     []int     `json:"numbers"`
-	BonusNumber *int      `json:"bonus_number,omitempty"`
-	Confidence  float64   `json:"confidence"`
-	CreatedAt   time.Time `json:"created_at"`
+	ID            int64     `json:"id"`
+	UserID        *int64    `json:"user_id,omitempty"`
+	MethodCodes   []string  `json:"method_codes"`
+	CombineMethod string    `json:"combine_method"`
+	Numbers       []int     `json:"numbers"`
+	BonusNumber   *int      `json:"bonus_number,omitempty"`
+	Confidence    float64   `json:"confidence"`
+	CreatedAt     time.Time `json:"created_at"`
 }
 
 // RecommendRequest 추천 요청
 type RecommendRequest struct {
 	MethodCodes  []string `json:"method_codes"`
+	CombineCode  string   `json:"combine_code"`  // 조합 방법 코드 (기본값: SIMPLE_AVG)
 	IncludeBonus bool     `json:"include_bonus"`
 	Count        int      `json:"count"` // 추천 세트 개수 (기본값: 1, 최대: 10)
 }
 
 // Recommendation 단일 추천 결과
 type Recommendation struct {
-	Numbers     []int                  `json:"numbers"`
-	Bonus       *int                   `json:"bonus,omitempty"`
-	MethodsUsed []string               `json:"methods_used"`
-	Confidence  float64                `json:"confidence"`
-	Details     map[string]interface{} `json:"details,omitempty"`
+	Numbers       []int                  `json:"numbers"`
+	Bonus         *int                   `json:"bonus,omitempty"`
+	MethodsUsed   []string               `json:"methods_used"`
+	CombineMethod string                 `json:"combine_method"`
+	Confidence    float64                `json:"confidence"`
+	Details       map[string]interface{} `json:"details,omitempty"`
 }
 
 // RecommendResponse 추천 응답
@@ -438,4 +441,43 @@ type RecommendResponse struct {
 type MethodListResponse struct {
 	Methods    []AnalysisMethod `json:"methods"`
 	TotalCount int              `json:"total_count"`
+}
+
+// ========================================
+// 확률 조합 방법 관련 모델
+// ========================================
+
+// 조합 방법 코드 상수
+const (
+	CombineSimpleAvg     = "SIMPLE_AVG"
+	CombineWeightedAvg   = "WEIGHTED_AVG"
+	CombineBayesian      = "BAYESIAN_COMBINE"
+	CombineGeometricMean = "GEOMETRIC_MEAN"
+	CombineMinMax        = "MIN_MAX"
+
+	MaxMethodCodes = 3 // 최대 선택 가능한 분석기법 수
+)
+
+// CombineMethod 확률 조합 방법 메타데이터
+type CombineMethod struct {
+	Code        string `json:"code"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	IsActive    bool   `json:"is_active"`
+	SortOrder   int    `json:"sort_order"`
+}
+
+// CombineMethodListResponse 조합 방법 목록 응답
+type CombineMethodListResponse struct {
+	Methods    []CombineMethod `json:"methods"`
+	TotalCount int             `json:"total_count"`
+}
+
+// AllCombineMethods 전체 조합 방법 목록 (하드코딩)
+var AllCombineMethods = []CombineMethod{
+	{Code: CombineSimpleAvg, Name: "단순 평균", Description: "선택한 기법들의 확률을 단순 평균하여 조합", IsActive: true, SortOrder: 1},
+	{Code: CombineWeightedAvg, Name: "가중 평균", Description: "각 기법의 신뢰도에 따라 가중치를 부여하여 평균", IsActive: false, SortOrder: 2},
+	{Code: CombineBayesian, Name: "베이지안 결합", Description: "베이지안 확률 결합으로 두 확률을 보수적으로 조합", IsActive: false, SortOrder: 3},
+	{Code: CombineGeometricMean, Name: "기하 평균", Description: "확률의 기하 평균으로 낮은 확률에 더 민감하게 반응", IsActive: false, SortOrder: 4},
+	{Code: CombineMinMax, Name: "최대/최소 기반", Description: "낙관적(최대) 또는 보수적(최소) 확률 선택", IsActive: false, SortOrder: 5},
 }
