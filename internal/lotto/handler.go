@@ -3,6 +3,7 @@ package lotto
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -374,6 +375,10 @@ func (h *Handler) RecommendNumbers(w http.ResponseWriter, r *http.Request) {
 		h.errorResponse(w, http.StatusBadRequest, "at least one method_code is required")
 		return
 	}
+	if len(req.MethodCodes) > MaxMethodCodes {
+		h.errorResponse(w, http.StatusBadRequest, fmt.Sprintf("maximum %d method_codes allowed", MaxMethodCodes))
+		return
+	}
 
 	// TODO: 인증된 사용자인 경우 userID 추출
 	var userID *int64 = nil
@@ -384,6 +389,12 @@ func (h *Handler) RecommendNumbers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.jsonResponse(w, http.StatusOK, resp)
+}
+
+// GetCombineMethods GET /api/lotto/combine-methods
+func (h *Handler) GetCombineMethods(w http.ResponseWriter, r *http.Request) {
+	resp := h.service.GetCombineMethods()
 	h.jsonResponse(w, http.StatusOK, resp)
 }
 

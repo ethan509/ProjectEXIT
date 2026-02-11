@@ -47,6 +47,9 @@ func (r *Recommender) Recommend(ctx context.Context, req RecommendRequest) (*Rec
 	if req.Count > 10 {
 		req.Count = 10
 	}
+	if req.CombineCode == "" {
+		req.CombineCode = CombineSimpleAvg
+	}
 
 	latestDrawNo, err := r.repo.GetLatestDrawNo(ctx)
 	if err != nil {
@@ -56,7 +59,7 @@ func (r *Recommender) Recommend(ctx context.Context, req RecommendRequest) (*Rec
 	recommendations := make([]Recommendation, 0, req.Count)
 
 	for i := 0; i < req.Count; i++ {
-		rec, err := r.generateSingleRecommendation(ctx, req.MethodCodes, req.IncludeBonus)
+		rec, err := r.generateSingleRecommendation(ctx, req.MethodCodes, req.CombineCode, req.IncludeBonus)
 		if err != nil {
 			return nil, err
 		}
@@ -71,8 +74,7 @@ func (r *Recommender) Recommend(ctx context.Context, req RecommendRequest) (*Rec
 }
 
 // generateSingleRecommendation 단일 추천 생성
-func (r *Recommender) generateSingleRecommendation(ctx context.Context, methodCodes []string, includeBonus bool) (*Recommendation, error) {
-	scores := make(map[int]float64)
+func (r *Recommender) generateSingleRecommendation(ctx context.Context, methodCodes []string, combineCode string, includeBonus bool) (*Recommendation, error) {
 	details := make(map[string]interface{})
 
 	stats, err := r.repo.GetLatestAnalysisStats(ctx)
@@ -80,20 +82,44 @@ func (r *Recommender) generateSingleRecommendation(ctx context.Context, methodCo
 		return nil, err
 	}
 
-	for _, code := range methodCodes {
-		candidates, methodDetails, err := r.getMethodCandidates(ctx, code, stats)
-		if err != nil {
-			r.log.Errorf("failed to get candidates for %s: %v", code, err)
-			continue
+	// 확률 조합 방식으로 추천
+	var scores map[int]float64
+
+	if combineCode != "" {
+		// 각 분석기법별 확률 맵 수집
+		probMaps := make([]map[int]float64, 0, len(methodCodes))
+		for _, code := range methodCodes {
+			probMap := r.getMethodProbabilities(code, stats)
+			probMaps = append(probMaps, probMap)
+			details[code] = map[string]interface{}{
+				"method": code,
+				"type":   "probability_based",
+			}
 		}
 
-		// 가중치 부여 (순위 기반)
-		for i, num := range candidates {
-			weight := 1.0 / float64(i+1) // 1위: 1.0, 2위: 0.5, 3위: 0.33...
-			scores[num] += weight
+		// 조합 방법 적용
+		switch combineCode {
+		case CombineSimpleAvg:
+			scores = r.combineSimpleAverage(probMaps)
+		default:
+			// 아직 미구현 조합방법은 단순평균으로 폴백
+			scores = r.combineSimpleAverage(probMaps)
 		}
-
-		details[code] = methodDetails
+	} else {
+		// 기존 순위 기반 방식 (하위 호환)
+		scores = make(map[int]float64)
+		for _, code := range methodCodes {
+			candidates, methodDetails, err := r.getMethodCandidates(ctx, code, stats)
+			if err != nil {
+				r.log.Errorf("failed to get candidates for %s: %v", code, err)
+				continue
+			}
+			for i, num := range candidates {
+				weight := 1.0 / float64(i+1)
+				scores[num] += weight
+			}
+			details[code] = methodDetails
+		}
 	}
 
 	// 점수 기준 상위 6개 선택
@@ -108,14 +134,15 @@ func (r *Recommender) generateSingleRecommendation(ctx context.Context, methodCo
 	}
 
 	// 신뢰도 계산
-	confidence := r.calculateConfidence(numbers, scores, len(methodCodes))
+	confidence := r.calculateCombineConfidence(numbers, scores, len(methodCodes))
 
 	return &Recommendation{
-		Numbers:     numbers,
-		Bonus:       bonus,
-		MethodsUsed: methodCodes,
-		Confidence:  confidence,
-		Details:     details,
+		Numbers:       numbers,
+		Bonus:         bonus,
+		MethodsUsed:   methodCodes,
+		CombineMethod: combineCode,
+		Confidence:    confidence,
+		Details:       details,
 	}, nil
 }
 
@@ -547,6 +574,92 @@ func (r *Recommender) calculateConfidence(numbers []int, scores map[int]float64,
 	maxTotal := maxScorePerMethod * float64(methodCount)
 
 	confidence := totalScore / maxTotal
+	if confidence > 1.0 {
+		confidence = 1.0
+	}
+	if confidence < 0.0 {
+		confidence = 0.0
+	}
+
+	return confidence
+}
+
+// ========================================
+// 확률 조합 관련 메서드
+// ========================================
+
+// getMethodProbabilities 분석기법별 번호(1~45) 확률 맵 반환
+func (r *Recommender) getMethodProbabilities(code string, stats []AnalysisStat) map[int]float64 {
+	probMap := make(map[int]float64, TotalNumbers)
+
+	for _, s := range stats {
+		switch code {
+		case "NUMBER_FREQUENCY":
+			probMap[s.Number] = s.TotalProb
+		case "REAPPEAR_PROB":
+			probMap[s.Number] = s.ReappearProb
+		case "FIRST_POSITION":
+			probMap[s.Number] = s.FirstProb
+		case "LAST_POSITION":
+			probMap[s.Number] = s.LastProb
+		case "PAIR_FREQUENCY":
+			probMap[s.Number] = s.TotalProb // 쌍 기반이지만 개별 번호 확률로 대체
+		case "CONSECUTIVE":
+			probMap[s.Number] = s.TotalProb
+		case "ODD_EVEN_RATIO":
+			probMap[s.Number] = s.TotalProb
+		case "HIGH_LOW_RATIO":
+			probMap[s.Number] = s.TotalProb
+		case "BAYESIAN":
+			probMap[s.Number] = s.BayesianPost
+		case "HOT_COLD":
+			probMap[s.Number] = s.BayesianPost
+		default:
+			probMap[s.Number] = s.TotalProb
+		}
+	}
+
+	return probMap
+}
+
+// combineSimpleAverage 단순 평균 조합: 각 번호별 확률을 산술 평균
+func (r *Recommender) combineSimpleAverage(probMaps []map[int]float64) map[int]float64 {
+	if len(probMaps) == 0 {
+		return make(map[int]float64)
+	}
+
+	combined := make(map[int]float64, TotalNumbers)
+	count := float64(len(probMaps))
+
+	for num := 1; num <= TotalNumbers; num++ {
+		sum := 0.0
+		for _, pm := range probMaps {
+			sum += pm[num]
+		}
+		combined[num] = sum / count
+	}
+
+	return combined
+}
+
+// calculateCombineConfidence 확률 조합 기반 신뢰도 계산
+func (r *Recommender) calculateCombineConfidence(numbers []int, scores map[int]float64, methodCount int) float64 {
+	if methodCount == 0 || len(numbers) == 0 {
+		return 0.0
+	}
+
+	// 선택된 번호들의 평균 확률
+	totalProb := 0.0
+	for _, n := range numbers {
+		totalProb += scores[n]
+	}
+	avgProb := totalProb / float64(len(numbers))
+
+	// 기대 확률(1/45 ≈ 0.0222)과 비교하여 신뢰도 산출
+	// 기대 확률보다 얼마나 높은지를 0~1 범위로 정규화
+	expectedProb := 1.0 / float64(TotalNumbers)
+	confidence := avgProb / (expectedProb * 3) // 기대치의 3배를 1.0으로 설정
+
 	if confidence > 1.0 {
 		confidence = 1.0
 	}

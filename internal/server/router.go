@@ -106,6 +106,7 @@ func NewRouter(deps Dependencies) http.Handler {
 
 				// 추천 기능
 				r.Get("/methods", lottoHandler.GetMethods)
+				r.Get("/combine-methods", lottoHandler.GetCombineMethods)
 				r.Post("/recommend", lottoHandler.RecommendNumbers)
 			})
 

@@ -813,6 +813,14 @@ func (s *Service) GetAnalysisMethods(ctx context.Context) (*MethodListResponse, 
 	}, nil
 }
 
+// GetCombineMethods 조합 방법 목록 반환
+func (s *Service) GetCombineMethods() *CombineMethodListResponse {
+	return &CombineMethodListResponse{
+		Methods:    AllCombineMethods,
+		TotalCount: len(AllCombineMethods),
+	}
+}
+
 // RecommendNumbers 번호 추천
 func (s *Service) RecommendNumbers(ctx context.Context, req RecommendRequest, userID *int64) (*RecommendResponse, error) {
 	// 분석 방법 유효성 검사
@@ -846,11 +854,12 @@ func (s *Service) RecommendNumbers(ctx context.Context, req RecommendRequest, us
 	// 추천 기록 저장
 	for _, rec := range resp.Recommendations {
 		lottoRec := &LottoRecommendation{
-			UserID:      userID,
-			MethodCodes: rec.MethodsUsed,
-			Numbers:     rec.Numbers,
-			BonusNumber: rec.Bonus,
-			Confidence:  rec.Confidence,
+			UserID:        userID,
+			MethodCodes:   rec.MethodsUsed,
+			CombineMethod: rec.CombineMethod,
+			Numbers:       rec.Numbers,
+			BonusNumber:   rec.Bonus,
+			Confidence:    rec.Confidence,
 		}
 		if err := s.repo.SaveRecommendation(ctx, lottoRec); err != nil {
 			s.log.Errorf("failed to save recommendation: %v", err)
