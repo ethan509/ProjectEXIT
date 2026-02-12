@@ -59,7 +59,7 @@ func (r *Recommender) Recommend(ctx context.Context, req RecommendRequest) (*Rec
 	recommendations := make([]Recommendation, 0, req.Count)
 
 	for i := 0; i < req.Count; i++ {
-		rec, err := r.generateSingleRecommendation(ctx, req.MethodCodes, req.CombineCode, req.IncludeBonus)
+		rec, err := r.generateSingleRecommendation(ctx, req)
 		if err != nil {
 			return nil, err
 		}
@@ -74,7 +74,7 @@ func (r *Recommender) Recommend(ctx context.Context, req RecommendRequest) (*Rec
 }
 
 // generateSingleRecommendation 단일 추천 생성
-func (r *Recommender) generateSingleRecommendation(ctx context.Context, methodCodes []string, combineCode string, includeBonus bool) (*Recommendation, error) {
+func (r *Recommender) generateSingleRecommendation(ctx context.Context, req RecommendRequest) (*Recommendation, error) {
 	details := make(map[string]interface{})
 
 	stats, err := r.repo.GetLatestAnalysisStats(ctx)
@@ -85,10 +85,10 @@ func (r *Recommender) generateSingleRecommendation(ctx context.Context, methodCo
 	// 확률 조합 방식으로 추천
 	var scores map[int]float64
 
-	if combineCode != "" {
+	if req.CombineCode != "" {
 		// 각 분석기법별 확률 맵 수집
-		probMaps := make([]map[int]float64, 0, len(methodCodes))
-		for _, code := range methodCodes {
+		probMaps := make([]map[int]float64, 0, len(req.MethodCodes))
+		for _, code := range req.MethodCodes {
 			probMap := r.getMethodProbabilities(code, stats)
 			probMaps = append(probMaps, probMap)
 			details[code] = map[string]interface{}{
@@ -98,9 +98,11 @@ func (r *Recommender) generateSingleRecommendation(ctx context.Context, methodCo
 		}
 
 		// 조합 방법 적용
-		switch combineCode {
+		switch req.CombineCode {
 		case CombineSimpleAvg:
 			scores = r.combineSimpleAverage(probMaps)
+		case CombineWeightedAvg:
+			scores = r.combineWeightedAverage(probMaps, req.MethodCodes, req.Weights)
 		default:
 			// 아직 미구현 조합방법은 단순평균으로 폴백
 			scores = r.combineSimpleAverage(probMaps)
@@ -108,7 +110,7 @@ func (r *Recommender) generateSingleRecommendation(ctx context.Context, methodCo
 	} else {
 		// 기존 순위 기반 방식 (하위 호환)
 		scores = make(map[int]float64)
-		for _, code := range methodCodes {
+		for _, code := range req.MethodCodes {
 			candidates, methodDetails, err := r.getMethodCandidates(ctx, code, stats)
 			if err != nil {
 				r.log.Errorf("failed to get candidates for %s: %v", code, err)
@@ -128,19 +130,19 @@ func (r *Recommender) generateSingleRecommendation(ctx context.Context, methodCo
 
 	// 보너스 번호 선택 (요청 시)
 	var bonus *int
-	if includeBonus {
+	if req.IncludeBonus {
 		bonusNum := r.selectBonusNumber(stats, numbers)
 		bonus = &bonusNum
 	}
 
 	// 신뢰도 계산
-	confidence := r.calculateCombineConfidence(numbers, scores, len(methodCodes))
+	confidence := r.calculateCombineConfidence(numbers, scores, len(req.MethodCodes))
 
 	return &Recommendation{
 		Numbers:       numbers,
 		Bonus:         bonus,
-		MethodsUsed:   methodCodes,
-		CombineMethod: combineCode,
+		MethodsUsed:   req.MethodCodes,
+		CombineMethod: req.CombineCode,
 		Confidence:    confidence,
 		Details:       details,
 	}, nil
@@ -637,6 +639,35 @@ func (r *Recommender) combineSimpleAverage(probMaps []map[int]float64) map[int]f
 			sum += pm[num]
 		}
 		combined[num] = sum / count
+	}
+
+	return combined
+}
+
+// combineWeightedAverage 가중 평균 조합: 유저 지정 가중치로 확률을 가중 평균
+func (r *Recommender) combineWeightedAverage(probMaps []map[int]float64, methodCodes []string, weights map[string]float64) map[int]float64 {
+	if len(probMaps) == 0 {
+		return make(map[int]float64)
+	}
+
+	// 가중치 합계 계산 (정규화용)
+	totalWeight := 0.0
+	for _, code := range methodCodes {
+		totalWeight += weights[code]
+	}
+	if totalWeight == 0 {
+		// 가중치 합이 0이면 단순 평균으로 폴백
+		return r.combineSimpleAverage(probMaps)
+	}
+
+	combined := make(map[int]float64, TotalNumbers)
+	for num := 1; num <= TotalNumbers; num++ {
+		weightedSum := 0.0
+		for i, pm := range probMaps {
+			w := weights[methodCodes[i]]
+			weightedSum += w * pm[num]
+		}
+		combined[num] = weightedSum / totalWeight
 	}
 
 	return combined
