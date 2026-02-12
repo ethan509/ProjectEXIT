@@ -103,6 +103,8 @@ func (r *Recommender) generateSingleRecommendation(ctx context.Context, req Reco
 			scores = r.combineSimpleAverage(probMaps)
 		case CombineWeightedAvg:
 			scores = r.combineWeightedAverage(probMaps, req.MethodCodes, req.Weights)
+		case CombineBayesian:
+			scores = r.combineBayesian(probMaps)
 		default:
 			// 아직 미구현 조합방법은 단순평균으로 폴백
 			scores = r.combineSimpleAverage(probMaps)
@@ -668,6 +670,37 @@ func (r *Recommender) combineWeightedAverage(probMaps []map[int]float64, methodC
 			weightedSum += w * pm[num]
 		}
 		combined[num] = weightedSum / totalWeight
+	}
+
+	return combined
+}
+
+// combineBayesian 베이지안 결합: 각 확률을 독립 증거로 취급하여 결합
+// P_combined(n) = ∏P_i(n) / (∏P_i(n) + ∏(1-P_i(n)))
+func (r *Recommender) combineBayesian(probMaps []map[int]float64) map[int]float64 {
+	if len(probMaps) == 0 {
+		return make(map[int]float64)
+	}
+
+	const epsilon = 1e-10 // 0/1 클램핑용
+
+	combined := make(map[int]float64, TotalNumbers)
+	for num := 1; num <= TotalNumbers; num++ {
+		prodP := 1.0    // ∏P_i(n)
+		prodNotP := 1.0 // ∏(1-P_i(n))
+		for _, pm := range probMaps {
+			p := pm[num]
+			// 0과 1 클램핑 (log 안전)
+			if p < epsilon {
+				p = epsilon
+			}
+			if p > 1-epsilon {
+				p = 1 - epsilon
+			}
+			prodP *= p
+			prodNotP *= (1 - p)
+		}
+		combined[num] = prodP / (prodP + prodNotP)
 	}
 
 	return combined

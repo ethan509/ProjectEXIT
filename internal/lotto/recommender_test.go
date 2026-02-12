@@ -377,6 +377,137 @@ func TestCombineWeightedAverage_FullRange(t *testing.T) {
 	}
 }
 
+func TestCombineBayesian(t *testing.T) {
+	r := &Recommender{}
+
+	t.Run("basic two methods", func(t *testing.T) {
+		// P_combined = P1*P2 / (P1*P2 + (1-P1)*(1-P2))
+		// 번호1: 0.3*0.4 / (0.3*0.4 + 0.7*0.6) = 0.12 / (0.12+0.42) = 0.12/0.54 ≈ 0.2222
+		// 번호2: 0.6*0.8 / (0.6*0.8 + 0.4*0.2) = 0.48 / (0.48+0.08) = 0.48/0.56 ≈ 0.8571
+		probMaps := []map[int]float64{
+			{1: 0.3, 2: 0.6},
+			{1: 0.4, 2: 0.8},
+		}
+
+		result := r.combineBayesian(probMaps)
+
+		if math.Abs(result[1]-0.2222) > 0.001 {
+			t.Errorf("number 1: got %.6f, want ~0.2222", result[1])
+		}
+		if math.Abs(result[2]-0.8571) > 0.001 {
+			t.Errorf("number 2: got %.6f, want ~0.8571", result[2])
+		}
+	})
+
+	t.Run("both high probabilities boost", func(t *testing.T) {
+		// 두 기법 모두 높은 확률 → 단순 평균보다 더 높게 부스팅
+		probMaps := []map[int]float64{
+			{1: 0.8},
+			{1: 0.7},
+		}
+
+		bayesian := r.combineBayesian(probMaps)
+		simple := r.combineSimpleAverage(probMaps)
+
+		// 베이지안 결합이 단순 평균(0.75)보다 높아야 함
+		if bayesian[1] <= simple[1] {
+			t.Errorf("bayesian (%.6f) should be > simple avg (%.6f) when both probs are high", bayesian[1], simple[1])
+		}
+	})
+
+	t.Run("one low probability suppresses", func(t *testing.T) {
+		// 한 기법이 낮은 확률 → 단순 평균보다 더 낮게 억제
+		// 0.7과 0.3: 단순평균=0.5, 베이지안=0.7*0.3/(0.7*0.3+0.3*0.7)=0.5 (대칭이므로 동일)
+		// 비대칭 케이스: 0.6과 0.2
+		// 단순평균 = 0.4
+		// 베이지안 = 0.6*0.2 / (0.6*0.2 + 0.4*0.8) = 0.12/(0.12+0.32) = 0.2727
+		probMaps := []map[int]float64{
+			{1: 0.6},
+			{1: 0.2},
+		}
+
+		bayesian := r.combineBayesian(probMaps)
+		simple := r.combineSimpleAverage(probMaps)
+
+		// 베이지안 결합(0.2727)이 단순 평균(0.40)보다 낮아야 함
+		if bayesian[1] >= simple[1] {
+			t.Errorf("bayesian (%.6f) should be < simple avg (%.6f) when one prob is low", bayesian[1], simple[1])
+		}
+	})
+
+	t.Run("equal probabilities", func(t *testing.T) {
+		// 동일 확률 0.5 → 베이지안 결합도 0.5
+		probMaps := []map[int]float64{
+			{1: 0.5},
+			{1: 0.5},
+		}
+
+		result := r.combineBayesian(probMaps)
+
+		if math.Abs(result[1]-0.5) > 0.0001 {
+			t.Errorf("number 1: got %.6f, want 0.5 with equal 0.5 inputs", result[1])
+		}
+	})
+
+	t.Run("three methods", func(t *testing.T) {
+		// P = 0.6*0.7*0.8 / (0.6*0.7*0.8 + 0.4*0.3*0.2) = 0.336 / (0.336+0.024) = 0.336/0.36 ≈ 0.9333
+		probMaps := []map[int]float64{
+			{1: 0.6},
+			{1: 0.7},
+			{1: 0.8},
+		}
+
+		result := r.combineBayesian(probMaps)
+
+		if math.Abs(result[1]-0.9333) > 0.001 {
+			t.Errorf("number 1: got %.6f, want ~0.9333", result[1])
+		}
+	})
+
+	t.Run("empty input", func(t *testing.T) {
+		result := r.combineBayesian(nil)
+		if len(result) != 0 {
+			t.Errorf("expected empty map, got %d entries", len(result))
+		}
+	})
+
+	t.Run("extreme values clamped", func(t *testing.T) {
+		// 0과 1에 가까운 값도 안전하게 처리
+		probMaps := []map[int]float64{
+			{1: 0.0, 2: 1.0},
+			{1: 0.5, 2: 0.5},
+		}
+
+		result := r.combineBayesian(probMaps)
+
+		// 0에 가까운 값은 매우 낮지만 정확히 0은 아님
+		if result[1] >= 0.01 {
+			t.Errorf("number 1: got %.6f, should be near 0 (clamped)", result[1])
+		}
+		// 1에 가까운 값은 매우 높지만 정확히 1은 아님
+		if result[2] <= 0.99 {
+			t.Errorf("number 2: got %.6f, should be near 1 (clamped)", result[2])
+		}
+	})
+}
+
+func TestCombineBayesian_FullRange(t *testing.T) {
+	r := &Recommender{}
+	stats := makeTestStats()
+
+	prob1 := r.getMethodProbabilities("NUMBER_FREQUENCY", stats)
+	prob2 := r.getMethodProbabilities("REAPPEAR_PROB", stats)
+
+	combined := r.combineBayesian([]map[int]float64{prob1, prob2})
+
+	// 결과가 45개 번호 모두에 대해 유효한 확률값인지 확인
+	for num := 1; num <= TotalNumbers; num++ {
+		if combined[num] < 0 || combined[num] > 1 {
+			t.Errorf("number %d: combined prob %.6f out of [0,1] range", num, combined[num])
+		}
+	}
+}
+
 func TestGetCombineMethods(t *testing.T) {
 	svc := &Service{}
 	resp := svc.GetCombineMethods()
@@ -385,15 +516,15 @@ func TestGetCombineMethods(t *testing.T) {
 		t.Errorf("expected 5 combine methods, got %d", resp.TotalCount)
 	}
 
-	// 활성화 상태 확인 (SIMPLE_AVG, WEIGHTED_AVG)
+	// 활성화 상태 확인 (SIMPLE_AVG, WEIGHTED_AVG, BAYESIAN_COMBINE)
 	activeCount := 0
 	for _, m := range resp.Methods {
 		if m.IsActive {
 			activeCount++
 		}
 	}
-	if activeCount != 2 {
-		t.Errorf("expected 2 active methods, got %d", activeCount)
+	if activeCount != 3 {
+		t.Errorf("expected 3 active methods, got %d", activeCount)
 	}
 
 	// SIMPLE_AVG가 활성화 상태인지 확인
