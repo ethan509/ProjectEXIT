@@ -108,6 +108,8 @@ func (r *Recommender) generateSingleRecommendation(ctx context.Context, req Reco
 			scores = r.combineBayesian(probMaps)
 		case CombineGeometricMean:
 			scores = r.combineGeometricMean(probMaps)
+		case CombineMinMax:
+			scores = r.combineMinMax(probMaps, req.MinMaxMode)
 		default:
 			// 아직 미구현 조합방법은 단순평균으로 폴백
 			scores = r.combineSimpleAverage(probMaps)
@@ -730,6 +732,34 @@ func (r *Recommender) combineGeometricMean(probMaps []map[int]float64) map[int]f
 			product *= p
 		}
 		combined[num] = math.Pow(product, 1.0/k)
+	}
+
+	return combined
+}
+
+// combineMinMax 최대/최소 기반 조합: 각 번호에 대해 최대(낙관) 또는 최소(보수) 확률 선택
+func (r *Recommender) combineMinMax(probMaps []map[int]float64, mode string) map[int]float64 {
+	if len(probMaps) == 0 {
+		return make(map[int]float64)
+	}
+
+	useMax := mode != "MIN" // 기본값: MAX (낙관적)
+
+	combined := make(map[int]float64, TotalNumbers)
+	for num := 1; num <= TotalNumbers; num++ {
+		result := probMaps[0][num]
+		for _, pm := range probMaps[1:] {
+			if useMax {
+				if pm[num] > result {
+					result = pm[num]
+				}
+			} else {
+				if pm[num] < result {
+					result = pm[num]
+				}
+			}
+		}
+		combined[num] = result
 	}
 
 	return combined

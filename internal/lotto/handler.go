@@ -403,6 +403,14 @@ func (h *Handler) RecommendNumbers(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// 최대/최소 선택 시 모드 검증
+	if req.CombineCode == CombineMinMax && req.MinMaxMode != "" {
+		if req.MinMaxMode != "MAX" && req.MinMaxMode != "MIN" {
+			h.errorResponse(w, http.StatusBadRequest, "min_max_mode must be 'MAX' or 'MIN'")
+			return
+		}
+	}
+
 	// TODO: 인증된 사용자인 경우 userID 추출
 	var userID *int64 = nil
 

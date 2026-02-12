@@ -635,6 +635,157 @@ func TestCombineGeometricMean_FullRange(t *testing.T) {
 	}
 }
 
+func TestCombineMinMax(t *testing.T) {
+	r := &Recommender{}
+
+	t.Run("max mode selects highest", func(t *testing.T) {
+		probMaps := []map[int]float64{
+			{1: 0.3, 2: 0.8},
+			{1: 0.7, 2: 0.4},
+		}
+
+		result := r.combineMinMax(probMaps, "MAX")
+
+		if math.Abs(result[1]-0.7) > 0.0001 {
+			t.Errorf("number 1: got %.6f, want 0.7 (max)", result[1])
+		}
+		if math.Abs(result[2]-0.8) > 0.0001 {
+			t.Errorf("number 2: got %.6f, want 0.8 (max)", result[2])
+		}
+	})
+
+	t.Run("min mode selects lowest", func(t *testing.T) {
+		probMaps := []map[int]float64{
+			{1: 0.3, 2: 0.8},
+			{1: 0.7, 2: 0.4},
+		}
+
+		result := r.combineMinMax(probMaps, "MIN")
+
+		if math.Abs(result[1]-0.3) > 0.0001 {
+			t.Errorf("number 1: got %.6f, want 0.3 (min)", result[1])
+		}
+		if math.Abs(result[2]-0.4) > 0.0001 {
+			t.Errorf("number 2: got %.6f, want 0.4 (min)", result[2])
+		}
+	})
+
+	t.Run("default is max", func(t *testing.T) {
+		probMaps := []map[int]float64{
+			{1: 0.2},
+			{1: 0.9},
+		}
+
+		// 빈 문자열이면 MAX 기본값
+		result := r.combineMinMax(probMaps, "")
+
+		if math.Abs(result[1]-0.9) > 0.0001 {
+			t.Errorf("number 1: got %.6f, want 0.9 (default MAX)", result[1])
+		}
+	})
+
+	t.Run("three methods max", func(t *testing.T) {
+		probMaps := []map[int]float64{
+			{1: 0.3},
+			{1: 0.9},
+			{1: 0.5},
+		}
+
+		result := r.combineMinMax(probMaps, "MAX")
+
+		if math.Abs(result[1]-0.9) > 0.0001 {
+			t.Errorf("number 1: got %.6f, want 0.9", result[1])
+		}
+	})
+
+	t.Run("three methods min", func(t *testing.T) {
+		probMaps := []map[int]float64{
+			{1: 0.3},
+			{1: 0.9},
+			{1: 0.5},
+		}
+
+		result := r.combineMinMax(probMaps, "MIN")
+
+		if math.Abs(result[1]-0.3) > 0.0001 {
+			t.Errorf("number 1: got %.6f, want 0.3", result[1])
+		}
+	})
+
+	t.Run("single method returns same", func(t *testing.T) {
+		probMaps := []map[int]float64{
+			{1: 0.6},
+		}
+
+		maxResult := r.combineMinMax(probMaps, "MAX")
+		minResult := r.combineMinMax(probMaps, "MIN")
+
+		if math.Abs(maxResult[1]-0.6) > 0.0001 {
+			t.Errorf("max: got %.6f, want 0.6", maxResult[1])
+		}
+		if math.Abs(minResult[1]-0.6) > 0.0001 {
+			t.Errorf("min: got %.6f, want 0.6", minResult[1])
+		}
+	})
+
+	t.Run("empty input", func(t *testing.T) {
+		result := r.combineMinMax(nil, "MAX")
+		if len(result) != 0 {
+			t.Errorf("expected empty map, got %d entries", len(result))
+		}
+	})
+
+	t.Run("max always >= simple average", func(t *testing.T) {
+		probMaps := []map[int]float64{
+			{1: 0.3, 2: 0.8, 3: 0.5},
+			{1: 0.7, 2: 0.4, 3: 0.5},
+		}
+
+		maxResult := r.combineMinMax(probMaps, "MAX")
+		simple := r.combineSimpleAverage(probMaps)
+
+		for num := 1; num <= 3; num++ {
+			if maxResult[num] < simple[num]-0.0001 {
+				t.Errorf("number %d: max (%.6f) < simple (%.6f)", num, maxResult[num], simple[num])
+			}
+		}
+	})
+
+	t.Run("min always <= simple average", func(t *testing.T) {
+		probMaps := []map[int]float64{
+			{1: 0.3, 2: 0.8, 3: 0.5},
+			{1: 0.7, 2: 0.4, 3: 0.5},
+		}
+
+		minResult := r.combineMinMax(probMaps, "MIN")
+		simple := r.combineSimpleAverage(probMaps)
+
+		for num := 1; num <= 3; num++ {
+			if minResult[num] > simple[num]+0.0001 {
+				t.Errorf("number %d: min (%.6f) > simple (%.6f)", num, minResult[num], simple[num])
+			}
+		}
+	})
+}
+
+func TestCombineMinMax_FullRange(t *testing.T) {
+	r := &Recommender{}
+	stats := makeTestStats()
+
+	prob1 := r.getMethodProbabilities("NUMBER_FREQUENCY", stats)
+	prob2 := r.getMethodProbabilities("REAPPEAR_PROB", stats)
+
+	maxCombined := r.combineMinMax([]map[int]float64{prob1, prob2}, "MAX")
+	minCombined := r.combineMinMax([]map[int]float64{prob1, prob2}, "MIN")
+
+	for num := 1; num <= TotalNumbers; num++ {
+		// MAX >= MIN 항상 성립
+		if maxCombined[num] < minCombined[num]-0.0001 {
+			t.Errorf("number %d: max (%.6f) < min (%.6f)", num, maxCombined[num], minCombined[num])
+		}
+	}
+}
+
 func TestGetCombineMethods(t *testing.T) {
 	svc := &Service{}
 	resp := svc.GetCombineMethods()
@@ -643,15 +794,15 @@ func TestGetCombineMethods(t *testing.T) {
 		t.Errorf("expected 5 combine methods, got %d", resp.TotalCount)
 	}
 
-	// 활성화 상태 확인 (SIMPLE_AVG, WEIGHTED_AVG, BAYESIAN_COMBINE, GEOMETRIC_MEAN)
+	// 활성화 상태 확인 (전체 5개 활성)
 	activeCount := 0
 	for _, m := range resp.Methods {
 		if m.IsActive {
 			activeCount++
 		}
 	}
-	if activeCount != 4 {
-		t.Errorf("expected 4 active methods, got %d", activeCount)
+	if activeCount != 5 {
+		t.Errorf("expected 5 active methods, got %d", activeCount)
 	}
 
 	// SIMPLE_AVG가 활성화 상태인지 확인

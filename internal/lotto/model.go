@@ -417,6 +417,7 @@ type RecommendRequest struct {
 	MethodCodes  []string           `json:"method_codes"`
 	CombineCode  string             `json:"combine_code"`            // 조합 방법 코드 (기본값: SIMPLE_AVG)
 	Weights      map[string]float64 `json:"weights,omitempty"`       // 가중 평균 시 기법별 가중치 (예: {"BAYESIAN": 0.5, "NUMBER_FREQUENCY": 0.3})
+	MinMaxMode   string             `json:"min_max_mode,omitempty"`  // MIN_MAX 조합 시 모드: "MAX"(낙관적, 기본) 또는 "MIN"(보수적)
 	IncludeBonus bool               `json:"include_bonus"`
 	Count        int                `json:"count"`                   // 추천 세트 개수 (기본값: 1, 최대: 10)
 }
@@ -480,5 +481,5 @@ var AllCombineMethods = []CombineMethod{
 	{Code: CombineWeightedAvg, Name: "가중 평균", Description: "각 기법별 가중치를 직접 지정하여 평균", IsActive: true, SortOrder: 2},
 	{Code: CombineBayesian, Name: "베이지안 결합", Description: "베이지안 확률 결합으로 두 확률을 보수적으로 조합", IsActive: true, SortOrder: 3},
 	{Code: CombineGeometricMean, Name: "기하 평균", Description: "확률의 기하 평균으로 낮은 확률에 더 민감하게 반응", IsActive: true, SortOrder: 4},
-	{Code: CombineMinMax, Name: "최대/최소 기반", Description: "낙관적(최대) 또는 보수적(최소) 확률 선택", IsActive: false, SortOrder: 5},
+	{Code: CombineMinMax, Name: "최대/최소 기반", Description: "낙관적(최대) 또는 보수적(최소) 확률 선택", IsActive: true, SortOrder: 5},
 }
