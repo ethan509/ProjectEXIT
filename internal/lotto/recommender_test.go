@@ -508,6 +508,133 @@ func TestCombineBayesian_FullRange(t *testing.T) {
 	}
 }
 
+func TestCombineGeometricMean(t *testing.T) {
+	r := &Recommender{}
+
+	t.Run("basic two methods", func(t *testing.T) {
+		// G = (0.4 * 0.9)^(1/2) = 0.36^0.5 = 0.6
+		probMaps := []map[int]float64{
+			{1: 0.4},
+			{1: 0.9},
+		}
+
+		result := r.combineGeometricMean(probMaps)
+
+		if math.Abs(result[1]-0.6) > 0.001 {
+			t.Errorf("number 1: got %.6f, want 0.6", result[1])
+		}
+	})
+
+	t.Run("lower than arithmetic mean", func(t *testing.T) {
+		// 기하 평균은 항상 산술 평균 이하 (AM-GM 부등식)
+		probMaps := []map[int]float64{
+			{1: 0.3},
+			{1: 0.8},
+		}
+
+		geo := r.combineGeometricMean(probMaps)
+		simple := r.combineSimpleAverage(probMaps)
+
+		if geo[1] > simple[1] {
+			t.Errorf("geometric (%.6f) should be <= simple avg (%.6f)", geo[1], simple[1])
+		}
+	})
+
+	t.Run("equal values unchanged", func(t *testing.T) {
+		// 동일 값의 기하 평균은 그 값 자체
+		probMaps := []map[int]float64{
+			{1: 0.5},
+			{1: 0.5},
+		}
+
+		result := r.combineGeometricMean(probMaps)
+
+		if math.Abs(result[1]-0.5) > 0.0001 {
+			t.Errorf("number 1: got %.6f, want 0.5", result[1])
+		}
+	})
+
+	t.Run("low probability penalizes heavily", func(t *testing.T) {
+		// 하나가 매우 낮으면 결과도 크게 낮아짐
+		// G = (0.9 * 0.01)^0.5 = 0.009^0.5 ≈ 0.0949
+		probMaps := []map[int]float64{
+			{1: 0.9},
+			{1: 0.01},
+		}
+
+		result := r.combineGeometricMean(probMaps)
+
+		if result[1] >= 0.1 {
+			t.Errorf("number 1: got %.6f, should be < 0.1 with one very low prob", result[1])
+		}
+	})
+
+	t.Run("three methods", func(t *testing.T) {
+		// G = (0.8 * 0.6 * 0.4)^(1/3) = 0.192^(1/3) ≈ 0.5769
+		probMaps := []map[int]float64{
+			{1: 0.8},
+			{1: 0.6},
+			{1: 0.4},
+		}
+
+		result := r.combineGeometricMean(probMaps)
+		expected := math.Pow(0.8*0.6*0.4, 1.0/3.0)
+
+		if math.Abs(result[1]-expected) > 0.0001 {
+			t.Errorf("number 1: got %.6f, want %.6f", result[1], expected)
+		}
+	})
+
+	t.Run("empty input", func(t *testing.T) {
+		result := r.combineGeometricMean(nil)
+		if len(result) != 0 {
+			t.Errorf("expected empty map, got %d entries", len(result))
+		}
+	})
+
+	t.Run("zero clamped to epsilon", func(t *testing.T) {
+		// 0은 epsilon으로 클램핑되어 결과가 매우 작지만 0은 아님
+		probMaps := []map[int]float64{
+			{1: 0.0},
+			{1: 0.5},
+		}
+
+		result := r.combineGeometricMean(probMaps)
+
+		if result[1] <= 0 {
+			t.Errorf("number 1: got %.10f, should be > 0 (epsilon clamped)", result[1])
+		}
+		if result[1] >= 0.001 {
+			t.Errorf("number 1: got %.6f, should be near 0", result[1])
+		}
+	})
+}
+
+func TestCombineGeometricMean_FullRange(t *testing.T) {
+	r := &Recommender{}
+	stats := makeTestStats()
+
+	prob1 := r.getMethodProbabilities("NUMBER_FREQUENCY", stats)
+	prob2 := r.getMethodProbabilities("REAPPEAR_PROB", stats)
+
+	combined := r.combineGeometricMean([]map[int]float64{prob1, prob2})
+
+	// 모든 번호에 대해 유효한 값인지 확인
+	for num := 1; num <= TotalNumbers; num++ {
+		if combined[num] < 0 {
+			t.Errorf("number %d: combined prob %.6f should be >= 0", num, combined[num])
+		}
+	}
+
+	// AM-GM: 기하 평균은 산술 평균 이하
+	simple := r.combineSimpleAverage([]map[int]float64{prob1, prob2})
+	for num := 1; num <= TotalNumbers; num++ {
+		if combined[num] > simple[num]+0.0001 {
+			t.Errorf("number %d: geometric (%.6f) > simple (%.6f), violates AM-GM", num, combined[num], simple[num])
+		}
+	}
+}
+
 func TestGetCombineMethods(t *testing.T) {
 	svc := &Service{}
 	resp := svc.GetCombineMethods()
@@ -516,15 +643,15 @@ func TestGetCombineMethods(t *testing.T) {
 		t.Errorf("expected 5 combine methods, got %d", resp.TotalCount)
 	}
 
-	// 활성화 상태 확인 (SIMPLE_AVG, WEIGHTED_AVG, BAYESIAN_COMBINE)
+	// 활성화 상태 확인 (SIMPLE_AVG, WEIGHTED_AVG, BAYESIAN_COMBINE, GEOMETRIC_MEAN)
 	activeCount := 0
 	for _, m := range resp.Methods {
 		if m.IsActive {
 			activeCount++
 		}
 	}
-	if activeCount != 3 {
-		t.Errorf("expected 3 active methods, got %d", activeCount)
+	if activeCount != 4 {
+		t.Errorf("expected 4 active methods, got %d", activeCount)
 	}
 
 	// SIMPLE_AVG가 활성화 상태인지 확인

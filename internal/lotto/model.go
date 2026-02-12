@@ -479,6 +479,6 @@ var AllCombineMethods = []CombineMethod{
 	{Code: CombineSimpleAvg, Name: "단순 평균", Description: "선택한 기법들의 확률을 단순 평균하여 조합", IsActive: true, SortOrder: 1},
 	{Code: CombineWeightedAvg, Name: "가중 평균", Description: "각 기법별 가중치를 직접 지정하여 평균", IsActive: true, SortOrder: 2},
 	{Code: CombineBayesian, Name: "베이지안 결합", Description: "베이지안 확률 결합으로 두 확률을 보수적으로 조합", IsActive: true, SortOrder: 3},
-	{Code: CombineGeometricMean, Name: "기하 평균", Description: "확률의 기하 평균으로 낮은 확률에 더 민감하게 반응", IsActive: false, SortOrder: 4},
+	{Code: CombineGeometricMean, Name: "기하 평균", Description: "확률의 기하 평균으로 낮은 확률에 더 민감하게 반응", IsActive: true, SortOrder: 4},
 	{Code: CombineMinMax, Name: "최대/최소 기반", Description: "낙관적(최대) 또는 보수적(최소) 확률 선택", IsActive: false, SortOrder: 5},
 }

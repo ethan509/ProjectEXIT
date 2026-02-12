@@ -2,6 +2,7 @@ package lotto
 
 import (
 	"context"
+	"math"
 	"math/rand"
 	"sort"
 	"time"
@@ -105,6 +106,8 @@ func (r *Recommender) generateSingleRecommendation(ctx context.Context, req Reco
 			scores = r.combineWeightedAverage(probMaps, req.MethodCodes, req.Weights)
 		case CombineBayesian:
 			scores = r.combineBayesian(probMaps)
+		case CombineGeometricMean:
+			scores = r.combineGeometricMean(probMaps)
 		default:
 			// 아직 미구현 조합방법은 단순평균으로 폴백
 			scores = r.combineSimpleAverage(probMaps)
@@ -701,6 +704,32 @@ func (r *Recommender) combineBayesian(probMaps []map[int]float64) map[int]float6
 			prodNotP *= (1 - p)
 		}
 		combined[num] = prodP / (prodP + prodNotP)
+	}
+
+	return combined
+}
+
+// combineGeometricMean 기하 평균 조합: 낮은 확률에 더 민감하게 반응
+// G(n) = (∏P_i(n))^(1/k), k = 기법 수
+func (r *Recommender) combineGeometricMean(probMaps []map[int]float64) map[int]float64 {
+	if len(probMaps) == 0 {
+		return make(map[int]float64)
+	}
+
+	const epsilon = 1e-10 // 0 클램핑용
+	k := float64(len(probMaps))
+
+	combined := make(map[int]float64, TotalNumbers)
+	for num := 1; num <= TotalNumbers; num++ {
+		product := 1.0
+		for _, pm := range probMaps {
+			p := pm[num]
+			if p < epsilon {
+				p = epsilon
+			}
+			product *= p
+		}
+		combined[num] = math.Pow(product, 1.0/k)
 	}
 
 	return combined
