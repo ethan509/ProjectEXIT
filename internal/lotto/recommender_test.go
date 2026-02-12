@@ -218,6 +218,165 @@ func TestSelectTopNumbers_WithCombinedScores(t *testing.T) {
 	}
 }
 
+func TestCombineWeightedAverage(t *testing.T) {
+	r := &Recommender{}
+
+	t.Run("basic weighted average", func(t *testing.T) {
+		// method A: 번호1=0.10, 번호2=0.40
+		// method B: 번호1=0.50, 번호2=0.20
+		// weights: A=0.7, B=0.3
+		// 번호1: (0.7*0.10 + 0.3*0.50) / (0.7+0.3) = (0.07+0.15)/1.0 = 0.22
+		// 번호2: (0.7*0.40 + 0.3*0.20) / (0.7+0.3) = (0.28+0.06)/1.0 = 0.34
+		probMaps := []map[int]float64{
+			{1: 0.10, 2: 0.40},
+			{1: 0.50, 2: 0.20},
+		}
+		codes := []string{"A", "B"}
+		weights := map[string]float64{"A": 0.7, "B": 0.3}
+
+		result := r.combineWeightedAverage(probMaps, codes, weights)
+
+		if math.Abs(result[1]-0.22) > 0.0001 {
+			t.Errorf("number 1: got %.6f, want 0.22", result[1])
+		}
+		if math.Abs(result[2]-0.34) > 0.0001 {
+			t.Errorf("number 2: got %.6f, want 0.34", result[2])
+		}
+	})
+
+	t.Run("equal weights equals simple average", func(t *testing.T) {
+		probMaps := []map[int]float64{
+			{1: 0.10, 2: 0.40, 3: 0.30},
+			{1: 0.30, 2: 0.20, 3: 0.10},
+		}
+		codes := []string{"A", "B"}
+		weights := map[string]float64{"A": 1.0, "B": 1.0}
+
+		weighted := r.combineWeightedAverage(probMaps, codes, weights)
+		simple := r.combineSimpleAverage(probMaps)
+
+		for num := 1; num <= 3; num++ {
+			if math.Abs(weighted[num]-simple[num]) > 0.0001 {
+				t.Errorf("number %d: weighted=%.6f != simple=%.6f with equal weights", num, weighted[num], simple[num])
+			}
+		}
+	})
+
+	t.Run("unnormalized weights auto-normalize", func(t *testing.T) {
+		// weights 합이 1이 아닌 경우에도 정규화
+		// A=2.0, B=3.0 → 정규화 후 A=0.4, B=0.6
+		// 번호1: (2.0*0.10 + 3.0*0.50) / 5.0 = (0.20+1.50)/5.0 = 0.34
+		probMaps := []map[int]float64{
+			{1: 0.10},
+			{1: 0.50},
+		}
+		codes := []string{"A", "B"}
+		weights := map[string]float64{"A": 2.0, "B": 3.0}
+
+		result := r.combineWeightedAverage(probMaps, codes, weights)
+
+		if math.Abs(result[1]-0.34) > 0.0001 {
+			t.Errorf("number 1: got %.6f, want 0.34", result[1])
+		}
+	})
+
+	t.Run("high weight dominates", func(t *testing.T) {
+		// A=0.99, B=0.01 → A의 값에 거의 수렴
+		probMaps := []map[int]float64{
+			{1: 0.80},
+			{1: 0.10},
+		}
+		codes := []string{"A", "B"}
+		weights := map[string]float64{"A": 0.99, "B": 0.01}
+
+		result := r.combineWeightedAverage(probMaps, codes, weights)
+
+		// (0.99*0.80 + 0.01*0.10) / 1.0 = 0.793
+		if math.Abs(result[1]-0.793) > 0.001 {
+			t.Errorf("number 1: got %.6f, want ~0.793", result[1])
+		}
+	})
+
+	t.Run("three methods", func(t *testing.T) {
+		// A=0.5, B=0.3, C=0.2
+		// 번호1: (0.5*0.60 + 0.3*0.20 + 0.2*0.10) / 1.0 = 0.30+0.06+0.02 = 0.38
+		probMaps := []map[int]float64{
+			{1: 0.60},
+			{1: 0.20},
+			{1: 0.10},
+		}
+		codes := []string{"A", "B", "C"}
+		weights := map[string]float64{"A": 0.5, "B": 0.3, "C": 0.2}
+
+		result := r.combineWeightedAverage(probMaps, codes, weights)
+
+		if math.Abs(result[1]-0.38) > 0.0001 {
+			t.Errorf("number 1: got %.6f, want 0.38", result[1])
+		}
+	})
+
+	t.Run("empty input", func(t *testing.T) {
+		result := r.combineWeightedAverage(nil, nil, nil)
+		if len(result) != 0 {
+			t.Errorf("expected empty map, got %d entries", len(result))
+		}
+	})
+
+	t.Run("zero weights fallback to simple average", func(t *testing.T) {
+		probMaps := []map[int]float64{
+			{1: 0.10, 2: 0.40},
+			{1: 0.30, 2: 0.20},
+		}
+		codes := []string{"A", "B"}
+		weights := map[string]float64{"A": 0.0, "B": 0.0}
+
+		weighted := r.combineWeightedAverage(probMaps, codes, weights)
+		simple := r.combineSimpleAverage(probMaps)
+
+		for num := 1; num <= 2; num++ {
+			if math.Abs(weighted[num]-simple[num]) > 0.0001 {
+				t.Errorf("number %d: zero-weight result should match simple avg", num)
+			}
+		}
+	})
+
+	t.Run("partial weights missing key treated as zero", func(t *testing.T) {
+		// B에 가중치가 없으면 0으로 처리 → A만 반영
+		// 번호1: (0.5*0.80 + 0.0*0.10) / 0.5 = 0.80
+		probMaps := []map[int]float64{
+			{1: 0.80},
+			{1: 0.10},
+		}
+		codes := []string{"A", "B"}
+		weights := map[string]float64{"A": 0.5}
+
+		result := r.combineWeightedAverage(probMaps, codes, weights)
+
+		if math.Abs(result[1]-0.80) > 0.0001 {
+			t.Errorf("number 1: got %.6f, want 0.80 (only A reflected)", result[1])
+		}
+	})
+}
+
+func TestCombineWeightedAverage_FullRange(t *testing.T) {
+	r := &Recommender{}
+	stats := makeTestStats()
+
+	prob1 := r.getMethodProbabilities("NUMBER_FREQUENCY", stats) // TotalProb: ascending
+	prob2 := r.getMethodProbabilities("REAPPEAR_PROB", stats)    // ReappearProb: descending
+
+	// 가중치 0.8:0.2 → 높은 번호가 유리 (TotalProb이 높으므로)
+	codes := []string{"NUMBER_FREQUENCY", "REAPPEAR_PROB"}
+	weights := map[string]float64{"NUMBER_FREQUENCY": 0.8, "REAPPEAR_PROB": 0.2}
+
+	combined := r.combineWeightedAverage([]map[int]float64{prob1, prob2}, codes, weights)
+
+	// 번호 45가 번호 1보다 높아야 함 (TotalProb 가중치가 더 크므로)
+	if combined[45] <= combined[1] {
+		t.Errorf("number 45 (%.6f) should be > number 1 (%.6f) with 0.8 weight on TotalProb", combined[45], combined[1])
+	}
+}
+
 func TestGetCombineMethods(t *testing.T) {
 	svc := &Service{}
 	resp := svc.GetCombineMethods()
@@ -226,15 +385,15 @@ func TestGetCombineMethods(t *testing.T) {
 		t.Errorf("expected 5 combine methods, got %d", resp.TotalCount)
 	}
 
-	// 첫 번째만 활성화 상태
+	// 활성화 상태 확인 (SIMPLE_AVG, WEIGHTED_AVG)
 	activeCount := 0
 	for _, m := range resp.Methods {
 		if m.IsActive {
 			activeCount++
 		}
 	}
-	if activeCount != 1 {
-		t.Errorf("expected 1 active method, got %d", activeCount)
+	if activeCount != 2 {
+		t.Errorf("expected 2 active methods, got %d", activeCount)
 	}
 
 	// SIMPLE_AVG가 활성화 상태인지 확인

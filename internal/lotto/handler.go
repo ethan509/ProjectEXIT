@@ -380,6 +380,29 @@ func (h *Handler) RecommendNumbers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 가중 평균 선택 시 가중치 검증
+	if req.CombineCode == CombineWeightedAvg {
+		if len(req.Weights) == 0 {
+			h.errorResponse(w, http.StatusBadRequest, "weights are required for WEIGHTED_AVG combine method")
+			return
+		}
+		// method_codes에 대응하는 가중치가 있는지 확인
+		methodSet := make(map[string]bool)
+		for _, code := range req.MethodCodes {
+			methodSet[code] = true
+		}
+		for key, val := range req.Weights {
+			if !methodSet[key] {
+				h.errorResponse(w, http.StatusBadRequest, fmt.Sprintf("weight key '%s' does not match any method_code", key))
+				return
+			}
+			if val <= 0 {
+				h.errorResponse(w, http.StatusBadRequest, fmt.Sprintf("weight for '%s' must be greater than 0", key))
+				return
+			}
+		}
+	}
+
 	// TODO: 인증된 사용자인 경우 userID 추출
 	var userID *int64 = nil
 
